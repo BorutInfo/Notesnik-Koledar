@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Notesnik</title>
+<style>
+/* ============================================================
+   1. SPREMENLJIVKE IN OSNOVE
+   ============================================================ */
+:root{
+  --bg:#f6f6f4;
+  --surface:#ffffff;
+  --line:#e4e3df;
+  --text:#1c1b19;
+  --dim:#8a8781;
+  --accent:#4f46e5;
+  --accent-soft:#eceafe;
+  --danger:#c0392b;
+  --today:#fff6e0;
+  --radius:14px;
+  --topbar-h:56px;
+  --bottombar-h:64px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#131312;
+    --surface:#1d1d1c;
+    --line:#2e2e2c;
+    --text:#eeedea;
+    --dim:#8d8b86;
+    --accent:#8b85f5;
+    --accent-soft:#26244a;
+    --danger:#e57373;
+    --today:#2a2415;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overscroll-behavior:none}
+body{
+  font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:var(--bg);color:var(--text);
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+/* nujno: naši gumbi imajo display:flex, kar bi sicer premagalo atribut hidden */
+[hidden]{display:none !important}
+
+/* ============================================================
+   2. POSTAVITEV: GLAVA / VSEBINA / NOGA
+   ============================================================ */
+#app{
+  position:fixed;inset:0;display:flex;flex-direction:column;
+  max-width:720px;margin:0 auto;
+  background:var(--bg);
+}
+#topbar{
+  height:calc(var(--topbar-h) + env(safe-area-inset-top));
+  padding-top:env(safe-area-inset-top);
+  flex:0 0 auto;display:flex;align-items:center;gap:10px;
+  padding-left:16px;padding-right:12px;
+  border-bottom:1px solid var(--line);
+  background:var(--surface);
+}
+#ctxTitle{flex:1;min-width:0;font-size:19px;font-weight:650;letter-spacing:-.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ctxTitle .sub{font-weight:400;color:var(--dim);font-size:15px;margin-left:6px}
+#btnToday{
+  flex:0 0 auto;font-size:14px;font-weight:600;color:var(--accent);
+  background:var(--accent-soft);padding:7px 13px;border-radius:999px;
+}
+/* position:relative je nujen – da se offsetTop otrok meri glede na #feed
+   in ne glede na #app (sicer se prvi dan skrije pod glavo). */
+#feed{flex:1;position:relative;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+
+#bottombar{
+  flex:0 0 auto;
+  height:calc(var(--bottombar-h) + env(safe-area-inset-bottom));
+  padding-bottom:env(safe-area-inset-bottom);
+  display:flex;align-items:center;gap:10px;padding-left:12px;padding-right:12px;
+  border-top:1px solid var(--line);background:var(--surface);
+}
+.seg{flex:1;display:flex;background:var(--bg);border-radius:11px;padding:3px;gap:2px}
+.seg button{
+  flex:1;padding:8px 4px;border-radius:9px;font-size:14px;font-weight:550;color:var(--dim);
+  transition:background .15s,color .15s;
+}
+.seg button.on{background:var(--surface);color:var(--text);font-weight:650;
+  box-shadow:0 1px 3px rgba(0,0,0,.10)}
+#btnAll{
+  flex:0 0 auto;font-size:14px;font-weight:600;padding:9px 14px;
+  border-radius:11px;background:var(--accent);color:#fff;
+}
+
+/* ============================================================
+   3. TEDENSKI POGLED – seznam dni
+   ============================================================ */
+.week-block{padding:0 12px}
+.week-head{
+  position:sticky;top:0;z-index:5;
+  display:flex;align-items:baseline;gap:8px;
+  padding:14px 6px 7px;background:var(--bg);
+  font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);
+}
+.week-head .range{text-transform:none;letter-spacing:0;font-weight:500}
+.days{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+
+.day-row{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  padding:13px 14px;border-bottom:1px solid var(--line);
+}
+.day-row:last-child{border-bottom:0}
+.day-row:active{background:var(--bg)}
+.day-row.is-today{background:var(--today)}
+.day-row.is-weekend .dnum,.day-row.is-weekend .dname{color:var(--dim)}
+
+.day-date{flex:0 0 52px;display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.dnum{font-size:21px;font-weight:650;letter-spacing:-.02em}
+.dname{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);margin-top:2px}
+.day-row.is-today .dnum{color:var(--accent)}
+
+.day-body{flex:1;min-width:0}
+.day-count{display:block;font-size:15px;font-weight:600}
+.day-count.zero{color:var(--dim);font-weight:400}
+.day-peek{display:block;font-size:13px;color:var(--dim);margin-top:3px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.day-chevron{flex:0 0 auto;color:var(--line);font-size:20px;margin-left:2px}
+
+.badge{
+  flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+  min-width:22px;height:22px;padding:0 7px;border-radius:999px;
+  background:var(--accent);color:#fff;font-size:12px;font-weight:700;
+}
+.badge.done-b{background:transparent;color:var(--dim);font-weight:500;padding:0 2px}
+
+/* ============================================================
+   4. MESEČNI POGLED – mreža
+   ============================================================ */
+.month-block{padding:6px 12px 20px}
+.month-head{
+  position:sticky;top:0;z-index:5;padding:14px 4px 8px;background:var(--bg);
+  font-size:17px;font-weight:700;letter-spacing:-.01em;
+}
+.dow{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:4px}
+.dow span{text-align:center;font-size:11px;font-weight:700;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.04em}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cell{
+  aspect-ratio:1/1;border-radius:10px;background:var(--surface);border:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  font-size:15px;font-weight:550;
+}
+.cell.pad{background:transparent;border-color:transparent;color:transparent;pointer-events:none}
+.cell.is-today{background:var(--today);border-color:var(--accent);color:var(--accent);font-weight:750}
+.cell:active{background:var(--bg)}
+.cell .cnt{
+  min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--accent);
+  color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;
+}
+.cell .dot{width:5px;height:5px;border-radius:50%;background:var(--line)}
+
+/* ============================================================
+   5. LETNI POGLED – 12 mini mesecev
+   ============================================================ */
+.year-block{padding:6px 12px 24px}
+.year-head{position:sticky;top:0;z-index:5;padding:14px 4px 10px;background:var(--bg);
+  font-size:20px;font-weight:750;letter-spacing:-.02em}
+.year-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+@media (max-width:400px){.year-grid{grid-template-columns:repeat(2,1fr)}}
+.mini{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 8px 10px}
+.mini h4{margin:0 0 6px;font-size:12px;font-weight:700;text-align:center;letter-spacing:.02em}
+.mini .mg{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.mini .md{
+  aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;
+  font-size:9px;color:var(--dim);border-radius:4px;line-height:1;
+}
+.mini .md.is-today{outline:1.5px solid var(--accent);color:var(--accent);font-weight:700}
+.mini .md.has{background:var(--accent);color:#fff;font-weight:700}   /* za .is-today, da ostane belo */
+
+/* ============================================================
+   6. LISTI (dnevni pogled, vse naloge)
+   ============================================================ */
+.sheet{
+  position:fixed;inset:0;z-index:50;background:var(--bg);
+  display:flex;flex-direction:column;max-width:720px;margin:0 auto;
+  transform:translateY(100%);transition:transform .26s cubic-bezier(.32,.72,0,1);
+  visibility:hidden;
+}
+.sheet.open{transform:translateY(0);visibility:visible}
+.sheet-top{
+  flex:0 0 auto;height:calc(var(--topbar-h) + env(safe-area-inset-top));
+  padding-top:env(safe-area-inset-top);
+  display:flex;align-items:center;gap:8px;padding-left:8px;padding-right:12px;
+  border-bottom:1px solid var(--line);background:var(--surface);
+}
+.sheet-back{font-size:15px;font-weight:600;color:var(--accent);padding:8px 10px;flex:0 0 auto}
+.sheet-title{flex:1;min-width:0;font-size:17px;font-weight:650;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 24px}
+
+/* dnevna glava */
+.day-hero{padding:6px 6px 14px}
+.day-hero .big{font-size:28px;font-weight:750;letter-spacing:-.025em}
+.day-hero .small{font-size:14px;color:var(--dim);margin-top:2px}
+
+/* alineje */
+.notes{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.note{display:flex;align-items:flex-start;gap:10px;padding:12px 12px;border-bottom:1px solid var(--line)}
+.note:last-child{border-bottom:0}
+.chk{
+  flex:0 0 auto;width:22px;height:22px;margin-top:1px;border-radius:50%;
+  border:2px solid var(--line);display:flex;align-items:center;justify-content:center;
+  font-size:13px;color:transparent;transition:background .15s,border-color .15s;
+}
+.note.done .chk{background:var(--accent);border-color:var(--accent);color:#fff}
+.note-main{flex:1;min-width:0}
+.note-date{
+  display:inline-block;font-size:11px;font-weight:700;letter-spacing:.03em;
+  color:var(--accent);background:var(--accent-soft);
+  padding:2px 7px;border-radius:5px;margin-bottom:4px;
+}
+.note.carried .note-date::after{content:" ↷";font-weight:700}
+.note-text{
+  font-size:16px;line-height:1.4;outline:none;word-break:break-word;min-height:22px;
+}
+.note-text:empty::before{content:"Nov zapisek…";color:var(--dim)}
+.note.done .note-text{text-decoration:line-through;color:var(--dim)}
+.note-del{flex:0 0 auto;width:28px;height:28px;border-radius:50%;color:var(--dim);
+  font-size:17px;display:flex;align-items:center;justify-content:center}
+.note-del:active{background:var(--bg);color:var(--danger)}
+.note-move{flex:0 0 auto;width:28px;height:28px;border-radius:50%;color:var(--dim);
+  display:flex;align-items:center;justify-content:center}
+.note-move:active{background:var(--bg);color:var(--accent)}
+.note-move svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* oznaka za odloženo nalogo */
+.note-wait{
+  display:inline-block;font-size:11px;font-weight:700;letter-spacing:.03em;
+  color:#8a6d1f;background:#fdf0cf;padding:2px 7px;border-radius:5px;margin:0 0 4px 5px;
+}
+@media (prefers-color-scheme: dark){ .note-wait{color:#e2c26a;background:#3a3010} }
+
+/* ============================================================
+   6b. OKENCE ZA PREMIK NALOGE
+   ============================================================ */
+.modal{position:fixed;inset:0;z-index:60;visibility:hidden}
+.modal.open{visibility:visible}
+.modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.38);opacity:0;transition:opacity .22s}
+.modal.open .modal-bg{opacity:1}
+.modal-card{
+  position:absolute;left:0;right:0;bottom:0;max-width:720px;margin:0 auto;
+  background:var(--surface);border-radius:20px 20px 0 0;
+  padding:8px 14px calc(16px + env(safe-area-inset-bottom));
+  transform:translateY(100%);transition:transform .24s cubic-bezier(.32,.72,0,1);
+  max-height:88vh;overflow-y:auto;
+}
+.modal.open .modal-card{transform:translateY(0)}
+.grip{width:38px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 12px}
+.modal h3{margin:0 0 3px;font-size:18px;font-weight:700;letter-spacing:-.01em}
+.modal .lead{margin:0 0 14px;font-size:14px;color:var(--dim)}
+.opt{
+  display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 15px;border-radius:12px;background:var(--bg);margin-bottom:8px;
+  font-size:16px;font-weight:600;text-align:left;
+}
+.opt:active{background:var(--accent-soft)}
+.opt .when{color:var(--dim);font-weight:400;font-size:14px;white-space:nowrap}
+.opt.reset{color:var(--accent)}
+.opt.cancel{background:transparent;justify-content:center;color:var(--dim);font-weight:550;margin-top:4px}
+.opt .chev{color:var(--dim);font-weight:400}
+
+/* --- dva tedna, sedem dni v vrsti: en sam element, štirinajst polj --- */
+.oznaka{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--dim);padding:2px 4px 7px}
+.dayline{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;
+  background:var(--bg);border-radius:12px;padding:5px;margin-bottom:10px}
+.dayline button{
+  min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:10px 1px;border-radius:9px;font-size:15px;font-weight:650;line-height:1;
+}
+.dayline .dw{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--dim)}
+.dayline button:active{background:var(--accent-soft)}
+.dayline button.cur{                       /* dan, na katerem smo – ni izbirljiv */
+  background:var(--surface);color:var(--dim);pointer-events:none;
+  box-shadow:inset 0 0 0 1.5px var(--line);
+}
+.dayline button.cur .dw{color:var(--accent)}
+.dayline button.wknd .dw{color:var(--danger);opacity:.75}
+
+/* --- "Drug datum": sistemski izbirnik čez celo vrstico ---
+   Polje za datum je raztegnjeno čez ves gumb in prosojno, zato se
+   sistemski koledar odpre ob dotiku kjerkoli po vrstici, ne le na ikoni. */
+.pickwrap{position:relative}
+.pickwrap input{
+  position:absolute;inset:0;width:100%;height:100%;
+  opacity:0;border:0;margin:0;padding:0;
+  -webkit-appearance:none;appearance:none;background:transparent;
+}
+
+.add-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  margin-top:12px;padding:14px;border-radius:var(--radius);
+  background:var(--accent);color:#fff;font-size:16px;font-weight:650;
+}
+.add-btn:active{opacity:.85}
+
+.empty{text-align:center;color:var(--dim);font-size:15px;padding:34px 20px}
+
+/* skupine v "vse naloge" */
+.group-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--dim);padding:18px 6px 8px}
+.group-title:first-child{padding-top:4px}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header id="topbar">
+    <div id="ctxTitle"></div>
+    <button id="btnToday">Danes</button>
+  </header>
+
+  <main id="feed"></main>
+
+  <footer id="bottombar">
+    <div class="seg" id="seg">
+      <button data-view="teden" class="on">Teden</button>
+      <button data-view="mesec">Mesec</button>
+      <button data-view="leto">Leto</button>
+    </div>
+    <button id="btnAll">Vse naloge</button>
+  </footer>
+</div>
+
+<!-- DNEVNI POGLED -->
+<section class="sheet" id="daySheet">
+  <div class="sheet-top">
+    <button class="sheet-back" id="dayBack">‹ Nazaj</button>
+    <div class="sheet-title" id="dayTitle"></div>
+  </div>
+  <div class="sheet-body" id="dayBody"></div>
+</section>
+
+<!-- OKENCE: PREMIK NALOGE NA IZBRAN DATUM -->
+<div class="modal" id="moveModal">
+  <div class="modal-bg" data-close="1"></div>
+  <div class="modal-card">
+    <div class="grip"></div>
+
+    <h3>Premakni nalogo</h3>
+    <p class="lead" id="moveLead"></p>
+
+    <div class="oznaka">Naslednja dva tedna</div>
+    <div class="dayline" id="moveDays"></div>
+
+    <label class="opt pickwrap">
+      <span>Drug datum</span><span class="chev">koledar ›</span>
+      <input type="date" id="movePick">
+    </label>
+
+    <button class="opt reset" id="btnReset" hidden>↺ Nazaj na današnji dan</button>
+    <button class="opt cancel" data-close="1">Prekliči</button>
+  </div>
+</div>
+
+<!-- VSE NALOGE -->
+<section class="sheet" id="allSheet">
+  <div class="sheet-top">
+    <button class="sheet-back" id="allBack">‹ Nazaj</button>
+    <div class="sheet-title" id="allTitle"></div>
+  </div>
+  <div class="sheet-body" id="allBody"></div>
+</section>
+
+<script>
+"use strict";
+
+/* ============================================================
+   1. SHRANJEVANJE
+   Poskusi localStorage; če ta ni na voljo (npr. predogled v
+   Claudu), pade nazaj na pomnilnik – aplikacija dela naprej,
+   samo da se po zaprtju ne shrani.
+   ============================================================ */
+const Store = (() => {
+  const KEY = "notesnik.v1";
+  let mem = null, ok = true;
+  try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); }
+  catch(e){ ok = false; }
+  return {
+    load(){
+      if(!ok) return mem ? JSON.parse(JSON.stringify(mem)) : null;
+      try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; }
+      catch(e){ return null; }
+    },
+    save(data){
+      if(!ok){ mem = JSON.parse(JSON.stringify(data)); return; }
+      try { localStorage.setItem(KEY, JSON.stringify(data)); } catch(e){}
+    },
+    persistent: ok
+  };
+})();
+
+/* ============================================================
+   2. PODATKOVNI MODEL
+   naloga = { id, text, created, done, doneDate, defer }
+   - created  = datum nastanka alineje (se NIKOLI ne spremeni – to je datum,
+                ki se izpiše ob alineji)
+   - defer    = datum, na katerega je bila naloga ročno premaknjena (ali null)
+   - Kje se naloga prikaže, se izračuna sproti, nič se ne "seli":
+       * opravljena   -> na dan, ko je bila opravljena
+       * neopravljena -> na max(defer ali created, danes)
+         torej: čaka do svojega datuma, potem pa se vsak dan sama
+         prestavlja naprej, dokler je ne označiš ali zbrišeš.
+   ============================================================ */
+const state = {
+  tasks: Store.load()?.tasks || [],
+  view: "teden",
+  openDay: null
+};
+function persist(){ Store.save({ tasks: state.tasks }); }
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ============================================================
+   3. DATUMI
+   ============================================================ */
+const DAN_KRATKO = ["ned","pon","tor","sre","čet","pet","sob"];
+const DAN_POLNO  = ["nedelja","ponedeljek","torek","sreda","četrtek","petek","sobota"];
+const MES_POLNO  = ["januar","februar","marec","april","maj","junij",
+                    "julij","avgust","september","oktober","november","december"];
+const MES_KRATKO = ["jan","feb","mar","apr","maj","jun","jul","avg","sep","okt","nov","dec"];
+
+const pad = n => String(n).padStart(2,"0");
+const iso = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+function parseISO(s){ const p = s.split("-").map(Number); return new Date(p[0], p[1]-1, p[2]); }
+function addDays(d,n){ const x = new Date(d.getFullYear(),d.getMonth(),d.getDate()); x.setDate(x.getDate()+n); return x; }
+function mondayOf(d){ const x = new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  const w = (x.getDay()+6)%7; x.setDate(x.getDate()-w); return x; }
+function sameYMD(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+function today(){ return new Date(); }
+function todayISO(){ return iso(new Date()); }
+
+/** ISO številka tedna */
+function weekNumber(d){
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay()||7));
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return Math.ceil(((t - y0)/86400000 + 1)/7);
+}
+/** Slovenska sklanjatev po številu: [1, 2, 3–4, 5+] */
+function sklon(n, oblike){
+  const r = n % 100;
+  if(r===1) return oblike[0];
+  if(r===2) return oblike[1];
+  if(r===3 || r===4) return oblike[2];
+  return oblike[3];
+}
+const nalogeBeseda = n => n+" "+sklon(n, ["naloga","nalogi","naloge","nalog"]);
+const odprteBeseda = n => n+" "+sklon(n, ["odprta naloga","odprti nalogi","odprte naloge","odprtih nalog"]);
+const opravljeneBeseda = n => n+" "+sklon(n, ["opravljena","opravljeni","opravljene","opravljenih"]);
+function kratekDatum(isoStr){ const d = parseISO(isoStr); return d.getDate()+". "+MES_KRATKO[d.getMonth()]+"."; }
+
+/* ============================================================
+   4. RAZPOREJANJE NALOG PO DNEH
+   ============================================================ */
+/** Na kateri dan "živi" naloga danes? (string primerjava dela za YYYY-MM-DD) */
+function placementOf(t, tISO){
+  if(t.done) return t.doneDate || t.created;
+  const sidro = t.defer || t.created;           // ročni premik prevlada nad datumom nastanka
+  return sidro > tISO ? sidro : tISO;
+}
+/** Map: "YYYY-MM-DD" -> {open, done, tasks:[]} */
+function buildIndex(){
+  const tISO = todayISO(), map = new Map();
+  for(const t of state.tasks){
+    const key = placementOf(t, tISO);
+    let e = map.get(key);
+    if(!e){ e = {open:0, done:0, tasks:[]}; map.set(key, e); }
+    if(t.done) e.done++; else e.open++;
+    e.tasks.push(t);
+  }
+  for(const e of map.values()){
+    e.tasks.sort((a,b)=> (a.done-b.done) || a.created.localeCompare(b.created) || a.id.localeCompare(b.id));
+  }
+  return map;
+}
+let INDEX = buildIndex();
+function refreshIndex(){ INDEX = buildIndex(); }
+
+/* ============================================================
+   5. NESKONČNI SEZNAM (skupen za vse tri poglede)
+   Enota = teden / mesec / leto. Indeks 0 = enota, v kateri je danes.
+   ============================================================ */
+const feedEl = document.getElementById("feed");
+const ctxTitle = document.getElementById("ctxTitle");
+const AHEAD = {teden:8, mesec:3, leto:1};
+const STEP  = {teden:6, mesec:3, leto:1};
+const MAXU  = {teden:160, mesec:60, leto:12};
+
+const feed = { first:0, last:0, busy:false };
+
+/* -- pretvorbe indeks <-> datum -------------------------------- */
+function unitStartDate(view, i){
+  const now = today();
+  if(view==="teden") return addDays(mondayOf(now), i*7);
+  if(view==="mesec") return new Date(now.getFullYear(), now.getMonth()+i, 1);
+  return new Date(now.getFullYear()+i, 0, 1);
+}
+function unitEndDate(view, i){
+  const now = today();
+  if(view==="teden") return addDays(mondayOf(now), i*7+6);
+  if(view==="mesec") return new Date(now.getFullYear(), now.getMonth()+i+1, 0);
+  return new Date(now.getFullYear()+i, 11, 31);
+}
+
+/* -- risanje ene enote ----------------------------------------- */
+function renderUnit(view, i){
+  if(view==="teden") return renderWeek(i);
+  if(view==="mesec") return renderMonth(i);
+  return renderYear(i);
+}
+
+function renderWeek(i){
+  const start = unitStartDate("teden", i);
+  const end   = addDays(start, 6);
+  const wrap = document.createElement("section");
+  wrap.className = "week-block"; wrap.dataset.unit = i;
+
+  const h = document.createElement("div");
+  h.className = "week-head";
+  const rng = start.getMonth()===end.getMonth()
+    ? start.getDate()+".–"+end.getDate()+". "+MES_POLNO[end.getMonth()]
+    : start.getDate()+". "+MES_KRATKO[start.getMonth()]+". – "+end.getDate()+". "+MES_KRATKO[end.getMonth()]+".";
+  h.innerHTML = '<span>'+weekNumber(start)+'. teden</span><span class="range">'+rng+'</span>';
+  wrap.appendChild(h);
+
+  const list = document.createElement("div");
+  list.className = "days";
+  const tISO = todayISO();
+  for(let k=0;k<7;k++){
+    const d = addDays(start,k), key = iso(d), e = INDEX.get(key);
+    const open = e ? e.open : 0, done = e ? e.done : 0;
+
+    const row = document.createElement("button");
+    row.className = "day-row" + (key===tISO ? " is-today":"") + ((d.getDay()===0||d.getDay()===6) ? " is-weekend":"");
+    row.dataset.date = key;
+
+    // število odprtih je izpisano z besedo levo, zato desno le kljukica za opravljene
+    const right = done>0 ? '<span class="badge done-b">✓ '+done+'</span>' : '';
+
+    const peek = e && e.tasks.length
+      ? (e.tasks.find(t=>!t.done) || e.tasks[0]).text || "(prazen zapisek)"
+      : "";
+
+    row.innerHTML =
+      '<span class="day-date"><span class="dnum">'+d.getDate()+'</span>'+
+      '<span class="dname">'+DAN_KRATKO[d.getDay()]+'</span></span>'+
+      '<span class="day-body">'+
+        '<span class="day-count'+(open?"":" zero")+'">'+(open? nalogeBeseda(open) : "—")+'</span>'+
+        (peek ? '<span class="day-peek">'+escapeHTML(peek)+'</span>' : '')+
+      '</span>'+
+      (right || '')+
+      '<span class="day-chevron">›</span>';
+    list.appendChild(row);
+  }
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function renderMonth(i){
+  const first = unitStartDate("mesec", i);
+  const y = first.getFullYear(), m = first.getMonth();
+  const wrap = document.createElement("section");
+  wrap.className = "month-block"; wrap.dataset.unit = i;
+
+  const h = document.createElement("div");
+  h.className = "month-head";
+  h.textContent = MES_POLNO[m].charAt(0).toUpperCase()+MES_POLNO[m].slice(1)+" "+y;
+  wrap.appendChild(h);
+
+  const dow = document.createElement("div");
+  dow.className = "dow";
+  dow.innerHTML = ["pon","tor","sre","čet","pet","sob","ned"].map(s=>"<span>"+s+"</span>").join("");
+  wrap.appendChild(dow);
+
+  const g = document.createElement("div");
+  g.className = "grid";
+  const lead = (new Date(y,m,1).getDay()+6)%7;
+  const dim  = new Date(y,m+1,0).getDate();
+  const tISO = todayISO();
+
+  for(let k=0;k<lead;k++){ const c=document.createElement("div"); c.className="cell pad"; g.appendChild(c); }
+  for(let dnum=1; dnum<=dim; dnum++){
+    const key = y+"-"+pad(m+1)+"-"+pad(dnum), e = INDEX.get(key);
+    const open = e ? e.open : 0, done = e ? e.done : 0;
+    const c = document.createElement("button");
+    c.className = "cell" + (key===tISO ? " is-today":"");
+    c.dataset.date = key;
+    c.innerHTML = '<span>'+dnum+'</span>' +
+      (open>0 ? '<span class="cnt">'+open+'</span>'
+              : (done>0 ? '<span class="dot"></span>' : '<span class="dot" style="opacity:0"></span>'));
+    g.appendChild(c);
+  }
+  wrap.appendChild(g);
+  return wrap;
+}
+
+function renderYear(i){
+  const y = unitStartDate("leto", i).getFullYear();
+  const wrap = document.createElement("section");
+  wrap.className = "year-block"; wrap.dataset.unit = i;
+
+  const h = document.createElement("div");
+  h.className = "year-head"; h.textContent = y;
+  wrap.appendChild(h);
+
+  const grid = document.createElement("div");
+  grid.className = "year-grid";
+  const tISO = todayISO();
+
+  for(let m=0;m<12;m++){
+    const mini = document.createElement("div");
+    mini.className = "mini";
+    const lead = (new Date(y,m,1).getDay()+6)%7;
+    const dim  = new Date(y,m+1,0).getDate();
+    let cells = "";
+    for(let k=0;k<lead;k++) cells += '<span class="md"></span>';
+    for(let dnum=1; dnum<=dim; dnum++){
+      const key = y+"-"+pad(m+1)+"-"+pad(dnum), e = INDEX.get(key);
+      const has = e && e.open>0;
+      cells += '<button class="md'+(has?" has":"")+(key===tISO?" is-today":"")+
+               '" data-date="'+key+'">'+dnum+'</button>';
+    }
+    mini.innerHTML = '<h4>'+MES_KRATKO[m]+'</h4><div class="mg">'+cells+'</div>';
+    grid.appendChild(mini);
+  }
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+/* -- gradnja / širjenje seznama -------------------------------- */
+function buildFeed(){
+  feedEl.innerHTML = "";
+  const a = AHEAD[state.view];
+  feed.first = -a; feed.last = a;
+  for(let i=feed.first;i<=feed.last;i++) feedEl.appendChild(renderUnit(state.view, i));
+  scrollToUnit(0);
+  updateCtx();
+}
+function unitEl(i){ return feedEl.querySelector('[data-unit="'+i+'"]'); }
+function scrollToUnit(i){
+  const el = unitEl(i);
+  if(el) feedEl.scrollTop = el.offsetTop - 2;
+}
+function extendDown(){
+  if(feed.busy || (feed.last - feed.first) >= MAXU[state.view]) return;
+  feed.busy = true;
+  const n = STEP[state.view], frag = document.createDocumentFragment();
+  for(let k=0;k<n;k++) frag.appendChild(renderUnit(state.view, ++feed.last));
+  feedEl.appendChild(frag);
+  feed.busy = false;
+}
+function extendUp(){
+  if(feed.busy || (feed.last - feed.first) >= MAXU[state.view]) return;
+  feed.busy = true;
+  const n = STEP[state.view], before = feedEl.scrollHeight, frag = document.createDocumentFragment();
+  for(let k=0;k<n;k++) frag.appendChild(renderUnit(state.view, --feed.first));
+  // vstavimo v pravilnem vrstnem redu (najstarejši na vrh)
+  const kids = Array.from(frag.children).reverse();
+  kids.forEach(el => feedEl.insertBefore(el, feedEl.firstChild));
+  feedEl.scrollTop += feedEl.scrollHeight - before;   // brez skoka slike
+  feed.busy = false;
+}
+
+/* -- naslov v glavi glede na položaj drsnika -------------------- */
+function currentUnitIndex(){
+  const top = feedEl.scrollTop + 8;
+  let cur = feed.first;
+  for(const el of feedEl.children){
+    if(el.offsetTop <= top) cur = Number(el.dataset.unit); else break;
+  }
+  return cur;
+}
+function updateCtx(){
+  const i = currentUnitIndex();
+  const s = unitStartDate(state.view, i), e = unitEndDate(state.view, i);
+  if(state.view==="teden"){
+    ctxTitle.innerHTML = weekNumber(s)+". teden <span class=\"sub\">"+
+      MES_POLNO[s.getMonth()]+" "+s.getFullYear()+"</span>";
+  } else if(state.view==="mesec"){
+    ctxTitle.innerHTML = MES_POLNO[s.getMonth()].charAt(0).toUpperCase()+MES_POLNO[s.getMonth()].slice(1)+
+      " <span class=\"sub\">"+s.getFullYear()+"</span>";
+  } else {
+    ctxTitle.innerHTML = "Leto <span class=\"sub\">"+s.getFullYear()+"</span>";
+  }
+  feed.ctxRange = [iso(s), iso(e)];
+}
+
+let scrollTick = false;
+feedEl.addEventListener("scroll", () => {
+  if(scrollTick) return;
+  scrollTick = true;
+  requestAnimationFrame(() => {
+    scrollTick = false;
+    if(feedEl.scrollTop < 500) extendUp();
+    else if(feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 900) extendDown();
+    updateCtx();
+  });
+}, {passive:true});
+
+/* ============================================================
+   6. DNEVNI POGLED
+   ============================================================ */
+const daySheet = document.getElementById("daySheet");
+const dayBody  = document.getElementById("dayBody");
+const dayTitle = document.getElementById("dayTitle");
+
+/* koledarček s puščico – ikona gumba za premik */
+const IKONA_KOLEDAR =
+  '<svg viewBox="0 0 24 24" aria-hidden="true">'+
+  '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>'+
+  '<path d="M10 15h5m0 0-2-2m2 2-2 2"/></svg>';
+
+function openDay(key){
+  state.openDay = key;
+  const d = parseISO(key);
+  dayTitle.textContent = d.getDate()+". "+MES_POLNO[d.getMonth()]+" "+d.getFullYear();
+  renderDay();
+  daySheet.classList.add("open");
+}
+function closeDay(){
+  daySheet.classList.remove("open");
+  state.openDay = null;
+  refreshIndex();
+  refreshVisible();
+}
+function renderDay(focusId){
+  const key = state.openDay, d = parseISO(key), tISO = todayISO();
+  const e = INDEX.get(key);
+  const tasks = e ? e.tasks : [];
+
+  let html = '<div class="day-hero">'+
+    '<div class="big">'+d.getDate()+". "+MES_POLNO[d.getMonth()]+'</div>'+
+    '<div class="small">'+DAN_POLNO[d.getDay()]+", "+d.getFullYear()+
+      (key===tISO ? " · danes" : "")+'</div></div>';
+
+  if(tasks.length){
+    html += '<div class="notes">';
+    for(const t of tasks){
+      const carried = !t.done && !t.defer && t.created < key;   // prenesena iz prejšnjih dni
+      const waiting = !t.done && t.defer && t.defer > tISO;     // čaka na svoj datum
+      html += '<div class="note'+(t.done?" done":"")+(carried?" carried":"")+'" data-id="'+t.id+'">'+
+        '<button class="chk" data-act="toggle">✓</button>'+
+        '<div class="note-main">'+
+          '<span class="note-date">'+kratekDatum(t.created)+'</span>'+
+          (waiting ? '<span class="note-wait">premaknjeno</span>' : '')+
+          '<div class="note-text" contenteditable="true" data-act="edit">'+escapeHTML(t.text)+'</div>'+
+        '</div>'+
+        (t.done ? '' : '<button class="note-move" data-act="move" title="Premakni">'+IKONA_KOLEDAR+'</button>')+
+        '<button class="note-del" data-act="del">×</button>'+
+      '</div>';
+    }
+    html += '</div>';
+  } else {
+    html += '<div class="empty">Ni zapiskov za ta dan.</div>';
+  }
+  html += '<button class="add-btn" id="addNote">+ &nbsp;Nov zapisek</button>';
+  dayBody.innerHTML = html;
+
+  if(focusId){
+    const el = dayBody.querySelector('[data-id="'+focusId+'"] .note-text');
+    if(el){ el.focus(); placeCaretEnd(el); }
+  }
+}
+function placeCaretEnd(el){
+  const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
+  const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+
+dayBody.addEventListener("click", ev => {
+  const add = ev.target.closest("#addNote");
+  if(add){
+    const t = { id:uid(), text:"", created:state.openDay, done:false, doneDate:null, defer:null };
+    state.tasks.push(t); persist(); refreshIndex(); renderDay(t.id);
+    return;
+  }
+  const note = ev.target.closest(".note"); if(!note) return;
+  const act = ev.target.closest("[data-act]")?.dataset.act;
+  const t = state.tasks.find(x => x.id === note.dataset.id); if(!t) return;
+
+  if(act === "toggle"){
+    t.done = !t.done;
+    t.doneDate = t.done ? state.openDay : null;
+    persist(); refreshIndex(); renderDay();
+  } else if(act === "move"){
+    openMove(t.id);
+  } else if(act === "del"){
+    state.tasks = state.tasks.filter(x => x.id !== t.id);
+    persist(); refreshIndex(); renderDay();
+  }
+});
+dayBody.addEventListener("input", ev => {
+  const el = ev.target.closest(".note-text"); if(!el) return;
+  const id = el.closest(".note").dataset.id;
+  const t = state.tasks.find(x => x.id === id); if(!t) return;
+  t.text = el.textContent.trim();
+  persist();
+});
+dayBody.addEventListener("keydown", ev => {
+  if(ev.key === "Enter" && ev.target.closest(".note-text")){
+    ev.preventDefault(); ev.target.blur();
+  }
+});
+document.getElementById("dayBack").addEventListener("click", closeDay);
+
+/* ============================================================
+   6b. PREMIK NALOGE NA IZBRAN DATUM
+   Naloga dobi polje "defer" = datum, do katerega naj počaka.
+   Ko ta datum mine in naloga še ni opravljena, se spet začne
+   sama prestavljati v današnji dan.
+   ============================================================ */
+const moveModal = document.getElementById("moveModal");
+const moveDays  = document.getElementById("moveDays");
+const moveLead  = document.getElementById("moveLead");
+const movePick  = document.getElementById("movePick");
+const btnReset  = document.getElementById("btnReset");
+let moveId = null;
+
+/* ---------- dva tedna, sedem dni v vrsti ----------
+   Prvo polje je dan, na katerem smo: ni izbirljivo, le označeno.
+   Sledi mu trinajst dni, torej skupaj štirinajst polj v dveh vrstah.
+   Stolpci se NE poravnavajo po dnevih v tednu – prvi stolpec je
+   vedno tekoči dan, ker tako lažje šteješ "čez toliko dni". */
+function risiVrsticoDni(baza){
+  let html = "";
+  for(let k=0;k<14;k++){
+    const d = addDays(baza, k), wknd = (d.getDay()===0 || d.getDay()===6);
+    const razred = k===0 ? "cur" : (wknd ? "wknd" : "");
+    html += '<button class="'+razred+'" data-date="'+(k===0 ? "" : iso(d))+'">'+
+              '<span class="dw">'+DAN_KRATKO[d.getDay()]+'</span>'+
+              '<span>'+d.getDate()+'</span>'+
+            '</button>';
+  }
+  moveDays.innerHTML = html;
+}
+
+function openMove(id){
+  const t = state.tasks.find(x => x.id === id); if(!t) return;
+  moveId = id;
+  moveLead.textContent = t.text ? "»"+t.text+"«" : "(prazen zapisek)";
+
+  risiVrsticoDni(parseISO(state.openDay));
+  // sistemski izbirnik: nazaj se ne da, najzgodnejši je jutrišnji dan
+  movePick.min   = iso(addDays(parseISO(state.openDay), 1));
+  movePick.value = t.defer || "";
+  btnReset.hidden = !t.defer;
+  moveModal.classList.add("open");
+}
+function closeMove(){ moveModal.classList.remove("open"); moveId = null; }
+
+function applyMove(dateISO){
+  const t = state.tasks.find(x => x.id === moveId); if(!t) return;
+  t.defer = dateISO || null;      // prazno = prekliči odlog, spet se prestavlja sam
+  persist(); refreshIndex(); closeMove(); renderDay(); refreshVisible();
+}
+
+moveModal.addEventListener("click", ev => {
+  if(ev.target.closest("[data-close]")){ closeMove(); return; }
+  if(ev.target.closest("#btnReset")){ applyMove(""); return; }
+  const b = ev.target.closest(".dayline [data-date]");
+  if(b && b.dataset.date) applyMove(b.dataset.date);
+});
+movePick.addEventListener("change", () => { if(movePick.value) applyMove(movePick.value); });
+
+/* Opomba: lasten koledarski izbirnik je bil odstranjen iz te datoteke.
+   Zdaj se za "Drug datum" uporablja sistemski izbirnik telefona
+   (<input type="date"> zgoraj v oknu za premik).
+   Celotna koda lastnega koledarja je shranjena v datoteki
+   koledar-izbirnik.html, če se bomo po preizkusu na telefonu
+   odločili zanjo. */
+
+/* ============================================================
+   7. VSE NALOGE ZA PRIKAZANO OBDOBJE
+   ============================================================ */
+const allSheet = document.getElementById("allSheet");
+const allBody  = document.getElementById("allBody");
+const allTitle = document.getElementById("allTitle");
+
+function openAll(){
+  const [from, to] = feed.ctxRange;
+  const tISO = todayISO();
+  const label = state.view==="teden" ? "Ta teden" : state.view==="mesec" ? "Ta mesec" : "To leto";
+  allTitle.textContent = "Vse naloge · " + label;
+
+  const inRange = state.tasks.filter(t => {
+    const p = placementOf(t, tISO);
+    return (t.created >= from && t.created <= to) || (p >= from && p <= to);
+  });
+  const open = inRange.filter(t=>!t.done).sort((a,b)=>a.created.localeCompare(b.created));
+  const done = inRange.filter(t=> t.done).sort((a,b)=>(b.doneDate||"").localeCompare(a.doneDate||""));
+
+  let html = '<div class="day-hero"><div class="big">'+
+    (open.length ? odprteBeseda(open.length) : "Nič odprtega")+'</div>'+
+    '<div class="small">'+kratekDatum(from)+" – "+kratekDatum(to)+
+    (done.length ? " · "+opravljeneBeseda(done.length) : "")+'</div></div>';
+
+  if(!inRange.length){
+    html += '<div class="empty">V tem obdobju ni nalog.</div>';
+  }
+  if(open.length){
+    html += '<div class="group-title">Odprte</div><div class="notes">';
+    for(const t of open) html += allRow(t, tISO);
+    html += '</div>';
+  }
+  if(done.length){
+    html += '<div class="group-title">Opravljene</div><div class="notes">';
+    for(const t of done) html += allRow(t, tISO);
+    html += '</div>';
+  }
+  allBody.innerHTML = html;
+  allSheet.classList.add("open");
+}
+function allRow(t, tISO){
+  const waiting = !t.done && t.defer && t.defer > tISO;
+  return '<div class="note'+(t.done?" done":"")+'" data-id="'+t.id+'" data-goto="'+placementOf(t,tISO)+'">'+
+    '<button class="chk" data-act="toggle2">✓</button>'+
+    '<div class="note-main">'+
+      '<span class="note-date">'+kratekDatum(t.created)+'</span>'+
+      (waiting ? '<span class="note-wait">čaka do '+kratekDatum(t.defer)+'</span>' : '')+
+      '<div class="note-text">'+escapeHTML(t.text || "(prazen zapisek)")+'</div>'+
+    '</div></div>';
+}
+allBody.addEventListener("click", ev => {
+  const note = ev.target.closest(".note"); if(!note) return;
+  const t = state.tasks.find(x => x.id === note.dataset.id); if(!t) return;
+  if(ev.target.closest('[data-act="toggle2"]')){
+    t.done = !t.done;
+    t.doneDate = t.done ? todayISO() : null;
+    persist(); refreshIndex(); refreshVisible(); openAll();
+  } else {
+    allSheet.classList.remove("open");
+    openDay(note.dataset.goto);
+  }
+});
+document.getElementById("allBack").addEventListener("click", () => {
+  allSheet.classList.remove("open");
+  refreshIndex(); refreshVisible();
+});
+document.getElementById("btnAll").addEventListener("click", openAll);
+
+/* ============================================================
+   8. KLIKI V SEZNAMU + PREKLOP POGLEDA
+   ============================================================ */
+feedEl.addEventListener("click", ev => {
+  const el = ev.target.closest("[data-date]");
+  if(el) openDay(el.dataset.date);
+});
+document.getElementById("seg").addEventListener("click", ev => {
+  const b = ev.target.closest("button[data-view]"); if(!b) return;
+  state.view = b.dataset.view;
+  for(const x of ev.currentTarget.children) x.classList.toggle("on", x === b);
+  refreshIndex();
+  buildFeed();
+});
+document.getElementById("btnToday").addEventListener("click", () => {
+  refreshIndex(); buildFeed();
+});
+
+/** Ponovno nariše samo trenutno vidne enote (po spremembi nalog). */
+function refreshVisible(){
+  const keepTop = feedEl.scrollTop;
+  const olds = Array.from(feedEl.children);
+  for(const old of olds){
+    const i = Number(old.dataset.unit);
+    feedEl.replaceChild(renderUnit(state.view, i), old);
+  }
+  feedEl.scrollTop = keepTop;
+  updateCtx();
+}
+
+/* ============================================================
+   9. POMOŽNO
+   ============================================================ */
+function escapeHTML(s){
+  return String(s).replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+/* Če je aplikacija dolgo odprta in se zamenja dan – osveži. */
+let lastDay = todayISO();
+setInterval(() => {
+  const n = todayISO();
+  if(n !== lastDay){ lastDay = n; refreshIndex(); buildFeed(); }
+}, 60000);
+
+/* zagon */
+buildFeed();
+</script>
+</body>
+</html>
