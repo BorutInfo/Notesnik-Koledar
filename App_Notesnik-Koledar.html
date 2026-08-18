@@ -323,16 +323,39 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   opacity:0;border:0;margin:0;padding:0;
   -webkit-appearance:none;appearance:none;background:transparent;
 }
-/* --- Izbirnik URE ---
-   Pri uri prosojno polje čez vrstico ne deluje: brskalnik ob kliku
-   na polje za uro kolesja ne odpre sam, kot ga pri datumu. Zato je
-   polje umaknjeno iz poti, kolesje pa odpremo z ukazom showPicker().
-   Vrstica ostane gumb, ki se odziva po vsej širini. */
-.timewrap{position:relative}
-.timewrap input{
-  position:absolute;left:14px;bottom:6px;width:1px;height:1px;
-  opacity:0;border:0;margin:0;padding:0;pointer-events:none;
+/* --- LASTNO KOLESJE ZA URO ---
+   Sistemsko kolesje ne spoštuje koraka 5 minut in se na telefonu
+   samo od sebe zapira, zato je narejeno lastno. Dva stolpca, ki se
+   vrtita in se zaskočita na sredino (scroll-snap). */
+.kolo{
+  position:relative;display:flex;align-items:stretch;justify-content:center;gap:4px;
+  height:176px;margin:4px 0 14px;background:var(--bg);border-radius:14px;overflow:hidden;
 }
+.kolo-pas{                          /* svetel pas, ki kaže izbrano vrstico */
+  position:absolute;left:10px;right:10px;top:50%;height:44px;margin-top:-22px;
+  background:var(--accent-soft);border-radius:10px;pointer-events:none;
+  z-index:0;                        /* mora biti POD številkami, sicer jih prekrije */
+}
+.kolo-dvopicje{
+  position:relative;z-index:1;
+  align-self:center;font-size:24px;font-weight:700;color:var(--dim);
+  padding-bottom:2px;pointer-events:none;
+}
+.kolo-stolpec{
+  position:relative;z-index:1;
+  width:82px;overflow-y:scroll;scroll-snap-type:y mandatory;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  scrollbar-width:none;padding:66px 0;             /* (176-44)/2 = 66 */
+}
+.kolo-stolpec::-webkit-scrollbar{display:none}
+.kolo-stolpec b{
+  display:flex;align-items:center;justify-content:center;
+  height:44px;scroll-snap-align:center;
+  font-size:26px;font-weight:600;letter-spacing:.01em;
+  color:var(--dim);font-variant-numeric:tabular-nums;
+}
+.kolo-stolpec b.on{color:var(--text);font-weight:750}
+.opt.potrdi{background:var(--accent);color:#fff;justify-content:center;font-weight:700}
 
 .add-btn{
   display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
@@ -408,9 +431,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
       <div class="oznaka">Uro</div>
       <button class="opt" id="uroIzbrisem">Izbrišem</button>
       <button class="opt" id="uroObdrzim">Obdržim</button>
-      <button class="opt timewrap" id="uroSpremeniOdpri">
+      <button class="opt" id="uroSpremeniOdpri">
         <span>Spremenim</span><span class="chev">kolesje ›</span>
-        <input type="time" id="uroSpremeni" step="300" tabindex="-1">
       </button>
       <button class="opt cancel" data-close="1">Prekliči</button>
     </div>
@@ -428,10 +450,15 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
       <h3>Ura zapiska</h3>
       <p class="lead" id="uraLead"></p>
       <p class="opozorilo" id="uraOpozorilo" hidden></p>
-      <button class="opt timewrap" id="uraOdpri">
-        <span>Izberi uro</span><span class="chev" id="uraPrikaz">kolesje ›</span>
-        <input type="time" id="uraPick" step="300" tabindex="-1">
-      </button>
+
+      <div class="kolo" id="kolo">
+        <div class="kolo-pas"></div>
+        <div class="kolo-stolpec" id="koloH"></div>
+        <div class="kolo-dvopicje">:</div>
+        <div class="kolo-stolpec" id="koloM"></div>
+      </div>
+
+      <button class="opt potrdi" id="uraPotrdi">Potrdi</button>
       <button class="opt reset" id="uraOdstrani" hidden>Odstrani uro</button>
       <button class="opt cancel" data-close="1">Prekliči</button>
     </div>
@@ -999,89 +1026,121 @@ document.getElementById("dayBack").addEventListener("click", closeDay);
    nad drugim.
    ============================================================ */
 const uraModal = document.getElementById("uraModal");
-const uraPick  = document.getElementById("uraPick");
 const uraSteps = [1,2,3].map(n => document.getElementById("uraStep"+n));
+const koloH = document.getElementById("koloH");
+const koloM = document.getElementById("koloM");
 let uraId = null;
+let premikCaka = null;   // dan, na katerega naj se premakne po potrditvi ure
 
 function uraKorak(n){ uraSteps.forEach((el,i)=> el.hidden = (i+1 !== n)); }
 
-/* Kolesje odpremo z ukazom showPicker(). Brskalnik ga ob kliku na polje
-   za uro ne odpre sam, kot ga pri datumu. Ukaz mora priti iz uporabnikovega
-   dotika, sicer ga brskalnik zavrne. Če ga brskalnik ne pozna, pademo
-   nazaj na klik po polju samem. */
-function odpriKolesje(input){
-  try { input.showPicker(); }
-  catch(e){ input.focus(); input.click(); }
+/* ---------- lastno kolesje ----------
+   Dva stolpca. Ure 0–23, minute po 5. Vrstica je visoka 44 slikovnih
+   pik; izbrana je tista, ki obstoji na sredini. */
+const VRSTICA = 44;
+const URE    = Array.from({length:24}, (_,i)=> pad(i));
+const MINUTE = Array.from({length:12}, (_,i)=> pad(i*5));
+
+function napolniKolo(){
+  koloH.innerHTML = URE.map(u=>'<b>'+u+'</b>').join("");
+  koloM.innerHTML = MINUTE.map(m=>'<b>'+m+'</b>').join("");
 }
+function nastaviKolo(ura){
+  const [h,m] = (ura || "12:00").split(":").map(Number);
+  koloH.scrollTop = h * VRSTICA;
+  koloM.scrollTop = Math.round(m/5) * VRSTICA;
+  oznaciKolo();
+}
+function beriKolo(){
+  const h = Math.round(koloH.scrollTop / VRSTICA);
+  const m = Math.round(koloM.scrollTop / VRSTICA);
+  return pad(Math.min(h,23)) + ":" + MINUTE[Math.min(m, MINUTE.length-1)];
+}
+function oznaciKolo(){
+  [[koloH,URE],[koloM,MINUTE]].forEach(([el])=>{
+    const i = Math.round(el.scrollTop / VRSTICA);
+    Array.from(el.children).forEach((b,k)=> b.classList.toggle("on", k===i));
+  });
+}
+[koloH, koloM].forEach(el => el.addEventListener("scroll", () => {
+  if(el.__t) cancelAnimationFrame(el.__t);
+  el.__t = requestAnimationFrame(oznaciKolo);
+}, {passive:true}));
+/* dotik na vrstico jo pripelje na sredino */
+[koloH, koloM].forEach(el => el.addEventListener("click", ev => {
+  const b = ev.target.closest("b"); if(!b) return;
+  el.scrollTo({ top: Array.prototype.indexOf.call(el.children, b)*VRSTICA, behavior:"smooth" });
+}));
 
 function openUra(id){
-  const t = state.tasks.find(x => x.id === id); if(!t) return;
   uraId = id;
+  const t = state.tasks.find(x => x.id === id); if(!t) return;
   const naslov = t.text ? "»"+t.text+"«" : "(prazen zapisek)";
   document.getElementById("uraLead").textContent  = naslov;
   document.getElementById("uraLead2").textContent = naslov;
   document.getElementById("uraOpozorilo").hidden  = true;
-  document.getElementById("uraPrikaz").textContent = t.ura ? t.ura.replace(":",".") : "kolesje ›";
   document.getElementById("uraOdstrani").hidden   = !t.ura;
-  uraPick.value = t.ura || "";
+  napolniKolo();
   uraKorak(1);
   uraModal.classList.add("open");
+  requestAnimationFrame(()=> nastaviKolo(t.ura));   // šele ko je okence vidno
 }
-function closeUra(){ uraModal.classList.remove("open"); uraId = null; }
+/** Dan, na katerega se ura nanaša: ob čakajočem premiku je to ciljni dan. */
+function uraDan(){ return premikCaka || state.openDay; }
 
-/** Uro zapiše in okence zapre. naslednjiDan = ali pade čez polnoč. */
+function closeUra(){
+  const id = uraId, d = premikCaka;
+  uraModal.classList.remove("open"); uraId = null; premikCaka = null;
+  if(d){ moveId = id; applyMove(d); }        // premik, ki je čakal na uro
+}
+
+/** Uro zapiše. naslednjiDan = ali pade čez polnoč. */
 function zapisiUro(t, ura, naslednjiDan, pripet){
   t.ura = ura;
   t.uraNaslednjiDan = !!naslednjiDan;
-  if(pripet){ t.pripet = true; t.defer = state.openDay; }
+  if(pripet){ t.pripet = true; t.defer = uraDan(); }
   persist(); refreshIndex(); renderDay(); refreshVisible();
 }
 
-uraPick.addEventListener("change", () => {
-  const t = state.tasks.find(x => x.id === uraId); if(!t || !uraPick.value) return;
-  const ura = uraPick.value.slice(0,5);
-
-  // nočna ura: vprašamo, kateremu dnevu pripada
-  if(jeNocnaUra(ura)){
-    const dan  = parseISO(state.openDay), jutri = addDays(dan, 1);
-    document.getElementById("uraVprasanje").textContent =
-      "Dodam danes po 23.55, jutri po 00.00?";
-    document.getElementById("uraDanesD").textContent = kratekDatum(iso(dan));
-    document.getElementById("uraJutriD").textContent = kratekDatum(iso(jutri));
-    uraKorak(2);
-    return;
-  }
-
-  // navadna ura: samo preverimo, da ni že mimo
-  if(uraJeMimo(state.openDay, ura, false)){
-    const o = document.getElementById("uraOpozorilo");
-    o.textContent = "Ura je pretekla."; o.hidden = false;
-    uraPick.value = t.ura || "";
-    return;
-  }
-  zapisiUro(t, ura, false, false);
-  closeUra();
-});
-
 uraModal.addEventListener("click", ev => {
   if(ev.target.closest("[data-close]")){ closeUra(); return; }
-  if(ev.target.closest("#uraOdpri")){ odpriKolesje(uraPick); return; }
   const t = state.tasks.find(x => x.id === uraId); if(!t) return;
 
   if(ev.target.closest("#uraOdstrani")){
     odstraniUro(t); renderDay(); refreshVisible(); closeUra(); return;
   }
+
+  if(ev.target.closest("#uraPotrdi")){
+    const ura = beriKolo();
+    // nočna ura: vprašamo, kateremu dnevu pripada
+    if(jeNocnaUra(ura)){
+      const dan = parseISO(uraDan()), jutri = addDays(dan, 1);
+      document.getElementById("uraVprasanje").textContent = "Dodam danes po 23.55, jutri po 00.00?";
+      document.getElementById("uraDanesD").textContent = kratekDatum(iso(dan));
+      document.getElementById("uraJutriD").textContent = kratekDatum(iso(jutri));
+      uraKorak(2);
+      return;
+    }
+    if(uraJeMimo(uraDan(), ura, false)){
+      const o = document.getElementById("uraOpozorilo");
+      o.textContent = "Ura je pretekla."; o.hidden = false;
+      return;
+    }
+    zapisiUro(t, ura, false, false);
+    closeUra();
+    return;
+  }
+
   if(ev.target.closest("#uraDanes")){
-    // ura pripada večeru dneva, ki ga gledamo – naloga obtiči tukaj
-    zapisiUro(t, uraPick.value.slice(0,5), true, true);
+    zapisiUro(t, beriKolo(), true, true);   // ura pripada večeru tega dne
     uraKorak(3);
     return;
   }
   if(ev.target.closest("#uraJutri")){
-    // ura pripada naslednjemu dnevu – naloga se preseli tja
-    const jutri = iso(addDays(parseISO(state.openDay), 1));
-    t.defer = jutri; t.pripet = false;
-    zapisiUro(t, uraPick.value.slice(0,5), false, false);
+    t.defer = iso(addDays(parseISO(uraDan()), 1));
+    t.pripet = false;
+    premikCaka = null;                 // dan je s tem že določen
+    zapisiUro(t, beriKolo(), false, false); // ura pripada naslednjemu dnevu
     closeUra();
     return;
   }
@@ -1145,7 +1204,6 @@ function zacniPremik(dateISO){
   ciljniDan = dateISO;
   document.getElementById("moveLead2").textContent =
     t.ura.replace(":",".")+" · premik na "+kratekDatum(dateISO);
-  document.getElementById("uroSpremeni").value = t.ura;
   moveStep1.hidden = true;
   moveStep2.hidden = false;
 }
@@ -1168,7 +1226,11 @@ moveModal.addEventListener("click", ev => {
   }
   if(t && ev.target.closest("#uroObdrzim")){ applyMove(ciljniDan); return; }
   if(ev.target.closest("#uroSpremeniOdpri")){
-    odpriKolesje(document.getElementById("uroSpremeni")); return;
+    premikCaka = ciljniDan;            // po potrditvi ure se izvede še premik
+    const id = moveId;
+    closeMove();
+    openUra(id);
+    return;
   }
 
   const b = ev.target.closest(".dayline [data-date]");
@@ -1176,15 +1238,7 @@ moveModal.addEventListener("click", ev => {
 });
 movePick.addEventListener("change", () => { if(movePick.value) zacniPremik(movePick.value); });
 
-/* "Spremenim": meni ostane odprt pod kolesjem. Če uporabnik kolesje
-   prekliče, brskalnik ne javi ničesar – meni je še vedno tam, zato
-   preklica ni treba zaznavati. Ob izbiri ure se premik izvede. */
-document.getElementById("uroSpremeni").addEventListener("change", ev => {
-  const t = state.tasks.find(x => x.id === moveId); if(!t || !ev.target.value) return;
-  t.ura = ev.target.value.slice(0,5);
-  t.uraNaslednjiDan = false;
-  applyMove(ciljniDan);
-});
+
 
 /* Opomba: lasten koledarski izbirnik je bil odstranjen iz te datoteke.
    Zdaj se za "Drug datum" uporablja sistemski izbirnik telefona
