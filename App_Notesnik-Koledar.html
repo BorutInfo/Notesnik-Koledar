@@ -4,12 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="color-scheme" content="light">
 <title>Notesnik</title>
 <style>
 /* ============================================================
    1. SPREMENLJIVKE IN OSNOVE
    ============================================================ */
 :root{
+  color-scheme: light;      /* brskalnik naj svoje dele riše svetlo */
   --bg:#f6f6f4;
   --surface:#ffffff;
   --line:#e4e3df;
@@ -23,6 +25,11 @@
   --topbar-h:56px;
   --bottombar-h:64px;
 }
+/* TEMNI NAČIN JE ZAENKRAT IZKLOPLJEN.
+   Aplikacija ne sledi več sistemski nastavitvi telefona; vedno je svetla.
+   Ko bodo prišle nastavitve, se bo tema izbirala tam. Vrednosti so
+   shranjene spodaj, da jih bo mogoče vrniti brez ugibanja.
+
 @media (prefers-color-scheme: dark){
   :root{
     --bg:#131312;
@@ -36,6 +43,7 @@
     --today:#2a2415;
   }
 }
+*/
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;margin:0;overscroll-behavior:none}
 body{
@@ -257,7 +265,6 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   margin:0 0 8px;padding:11px 14px;border-radius:11px;
   background:#fdecea;color:#8c2f22;font-size:14px;font-weight:600;
 }
-@media (prefers-color-scheme:dark){ .opozorilo{background:#3a1f1b;color:#e9a89e} }
 .opozorilo.mirno{background:var(--bg);color:var(--dim);font-weight:500}
 
 /* oznaka za odloženo nalogo */
@@ -265,7 +272,6 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   display:inline-block;font-size:11px;font-weight:700;letter-spacing:.03em;
   color:#8a6d1f;background:#fdf0cf;padding:2px 7px;border-radius:5px;margin:0 0 4px 5px;
 }
-@media (prefers-color-scheme: dark){ .note-wait{color:#e2c26a;background:#3a3010} }
 
 /* ============================================================
    6b. OKENCE ZA PREMIK NALOGE
