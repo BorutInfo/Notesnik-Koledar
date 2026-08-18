@@ -244,8 +244,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 }
 .ura-btn small{font-size:11px;font-weight:600;opacity:.8}
 .ura-btn:active{filter:brightness(.94)}
-.ura-btn.prazna{                       /* bleda urica, dokler ure ni */
-  background:transparent;color:var(--line);padding:2px 2px;
+.ura-btn.prazna{                       /* urica, dokler ure ni */
+  background:transparent;color:var(--dim);padding:2px 2px;
 }
 .ura-btn.prazna svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;
   stroke-linecap:round;stroke-linejoin:round;display:block}
@@ -323,6 +323,16 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   opacity:0;border:0;margin:0;padding:0;
   -webkit-appearance:none;appearance:none;background:transparent;
 }
+/* --- Izbirnik URE ---
+   Pri uri prosojno polje čez vrstico ne deluje: brskalnik ob kliku
+   na polje za uro kolesja ne odpre sam, kot ga pri datumu. Zato je
+   polje umaknjeno iz poti, kolesje pa odpremo z ukazom showPicker().
+   Vrstica ostane gumb, ki se odziva po vsej širini. */
+.timewrap{position:relative}
+.timewrap input{
+  position:absolute;left:14px;bottom:6px;width:1px;height:1px;
+  opacity:0;border:0;margin:0;padding:0;pointer-events:none;
+}
 
 .add-btn{
   display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
@@ -398,10 +408,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
       <div class="oznaka">Uro</div>
       <button class="opt" id="uroIzbrisem">Izbrišem</button>
       <button class="opt" id="uroObdrzim">Obdržim</button>
-      <label class="opt pickwrap">
+      <button class="opt timewrap" id="uroSpremeniOdpri">
         <span>Spremenim</span><span class="chev">kolesje ›</span>
-        <input type="time" id="uroSpremeni" step="300">
-      </label>
+        <input type="time" id="uroSpremeni" step="300" tabindex="-1">
+      </button>
       <button class="opt cancel" data-close="1">Prekliči</button>
     </div>
   </div>
@@ -418,10 +428,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
       <h3>Ura zapiska</h3>
       <p class="lead" id="uraLead"></p>
       <p class="opozorilo" id="uraOpozorilo" hidden></p>
-      <label class="opt pickwrap">
+      <button class="opt timewrap" id="uraOdpri">
         <span>Izberi uro</span><span class="chev" id="uraPrikaz">kolesje ›</span>
-        <input type="time" id="uraPick" step="300">
-      </label>
+        <input type="time" id="uraPick" step="300" tabindex="-1">
+      </button>
       <button class="opt reset" id="uraOdstrani" hidden>Odstrani uro</button>
       <button class="opt cancel" data-close="1">Prekliči</button>
     </div>
@@ -995,6 +1005,15 @@ let uraId = null;
 
 function uraKorak(n){ uraSteps.forEach((el,i)=> el.hidden = (i+1 !== n)); }
 
+/* Kolesje odpremo z ukazom showPicker(). Brskalnik ga ob kliku na polje
+   za uro ne odpre sam, kot ga pri datumu. Ukaz mora priti iz uporabnikovega
+   dotika, sicer ga brskalnik zavrne. Če ga brskalnik ne pozna, pademo
+   nazaj na klik po polju samem. */
+function odpriKolesje(input){
+  try { input.showPicker(); }
+  catch(e){ input.focus(); input.click(); }
+}
+
 function openUra(id){
   const t = state.tasks.find(x => x.id === id); if(!t) return;
   uraId = id;
@@ -1046,6 +1065,7 @@ uraPick.addEventListener("change", () => {
 
 uraModal.addEventListener("click", ev => {
   if(ev.target.closest("[data-close]")){ closeUra(); return; }
+  if(ev.target.closest("#uraOdpri")){ odpriKolesje(uraPick); return; }
   const t = state.tasks.find(x => x.id === uraId); if(!t) return;
 
   if(ev.target.closest("#uraOdstrani")){
@@ -1147,6 +1167,9 @@ moveModal.addEventListener("click", ev => {
     applyMove(ciljniDan); return;
   }
   if(t && ev.target.closest("#uroObdrzim")){ applyMove(ciljniDan); return; }
+  if(ev.target.closest("#uroSpremeniOdpri")){
+    odpriKolesje(document.getElementById("uroSpremeni")); return;
+  }
 
   const b = ev.target.closest(".dayline [data-date]");
   if(b && b.dataset.date) zacniPremik(b.dataset.date);
