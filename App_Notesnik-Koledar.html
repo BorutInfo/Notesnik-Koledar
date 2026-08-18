@@ -235,6 +235,31 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .note-move svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.9;
   stroke-linecap:round;stroke-linejoin:round}
 
+/* --- ura na začetku besedila --- */
+.note-line{display:flex;align-items:flex-start;gap:8px}
+.ura-btn{
+  flex:0 0 auto;display:flex;align-items:baseline;gap:5px;margin-top:1px;
+  padding:2px 8px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+  font-size:15px;font-weight:700;letter-spacing:-.01em;line-height:1.35;
+}
+.ura-btn small{font-size:11px;font-weight:600;opacity:.8}
+.ura-btn:active{filter:brightness(.94)}
+.ura-btn.prazna{                       /* bleda urica, dokler ure ni */
+  background:transparent;color:var(--line);padding:2px 2px;
+}
+.ura-btn.prazna svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round;display:block}
+.note.done .ura-btn{background:transparent;color:var(--dim);text-decoration:line-through}
+.note.done .ura-btn.prazna{display:none}   /* odkljukani nalogi se ure ne da dodati */
+
+/* opozorilna vrstica v okencu */
+.opozorilo{
+  margin:0 0 8px;padding:11px 14px;border-radius:11px;
+  background:#fdecea;color:#8c2f22;font-size:14px;font-weight:600;
+}
+@media (prefers-color-scheme:dark){ .opozorilo{background:#3a1f1b;color:#e9a89e} }
+.opozorilo.mirno{background:var(--bg);color:var(--dim);font-weight:500}
+
 /* oznaka za odloženo nalogo */
 .note-wait{
   display:inline-block;font-size:11px;font-weight:700;letter-spacing:.03em;
@@ -349,19 +374,73 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   <div class="modal-card">
     <div class="grip"></div>
 
-    <h3>Premakni nalogo</h3>
-    <p class="lead" id="moveLead"></p>
+    <!-- korak 1: izbira dneva -->
+    <div id="moveStep1">
+      <h3>Premakni nalogo</h3>
+      <p class="lead" id="moveLead"></p>
 
-    <div class="oznaka">Naslednja dva tedna</div>
-    <div class="dayline" id="moveDays"></div>
+      <div class="oznaka">Naslednja dva tedna</div>
+      <div class="dayline" id="moveDays"></div>
 
-    <label class="opt pickwrap">
-      <span>Drug datum</span><span class="chev">koledar ›</span>
-      <input type="date" id="movePick">
-    </label>
+      <label class="opt pickwrap">
+        <span>Drug datum</span><span class="chev">koledar ›</span>
+        <input type="date" id="movePick">
+      </label>
 
-    <button class="opt reset" id="btnReset" hidden>↺ Nazaj na današnji dan</button>
-    <button class="opt cancel" data-close="1">Prekliči</button>
+      <button class="opt reset" id="btnReset" hidden>↺ Nazaj na današnji dan</button>
+      <button class="opt cancel" data-close="1">Prekliči</button>
+    </div>
+
+    <!-- korak 2: kaj z uro, preden se premik izvede -->
+    <div id="moveStep2" hidden>
+      <h3>Naloga ima uro</h3>
+      <p class="lead" id="moveLead2"></p>
+      <div class="oznaka">Uro</div>
+      <button class="opt" id="uroIzbrisem">Izbrišem</button>
+      <button class="opt" id="uroObdrzim">Obdržim</button>
+      <label class="opt pickwrap">
+        <span>Spremenim</span><span class="chev">kolesje ›</span>
+        <input type="time" id="uroSpremeni" step="300">
+      </label>
+      <button class="opt cancel" data-close="1">Prekliči</button>
+    </div>
+  </div>
+</div>
+
+<!-- OKENCE: URA ZAPISKA -->
+<div class="modal" id="uraModal">
+  <div class="modal-bg" data-close="1"></div>
+  <div class="modal-card">
+    <div class="grip"></div>
+
+    <!-- korak 1: kolesje -->
+    <div id="uraStep1">
+      <h3>Ura zapiska</h3>
+      <p class="lead" id="uraLead"></p>
+      <p class="opozorilo" id="uraOpozorilo" hidden></p>
+      <label class="opt pickwrap">
+        <span>Izberi uro</span><span class="chev" id="uraPrikaz">kolesje ›</span>
+        <input type="time" id="uraPick" step="300">
+      </label>
+      <button class="opt reset" id="uraOdstrani" hidden>Odstrani uro</button>
+      <button class="opt cancel" data-close="1">Prekliči</button>
+    </div>
+
+    <!-- korak 2: vprašanje Danes / Jutri -->
+    <div id="uraStep2" hidden>
+      <h3 id="uraVprasanje"></h3>
+      <p class="lead" id="uraLead2"></p>
+      <button class="opt" id="uraDanes"><span>Danes</span><span class="when" id="uraDanesD"></span></button>
+      <button class="opt" id="uraJutri"><span>Jutri</span><span class="when" id="uraJutriD"></span></button>
+      <button class="opt cancel" data-close="1">Prekliči</button>
+    </div>
+
+    <!-- korak 3: obvestilo po kliku na Danes -->
+    <div id="uraStep3" hidden>
+      <h3>Ura je zapisana</h3>
+      <p class="opozorilo mirno">Ta zadeva ne bo podaljševana samodejno.</p>
+      <button class="opt" data-close="1"><span>V redu</span></button>
+    </div>
   </div>
 </div>
 
@@ -464,10 +543,39 @@ function kratekDatum(isoStr){ const d = parseISO(isoStr); return d.getDate()+". 
 /* ============================================================
    4. RAZPOREJANJE NALOG PO DNEH
    ============================================================ */
+/* ---------- URA ----------
+   ura              = "01:00" ali null
+   uraNaslednjiDan  = ali ura pade čez polnoč (koncert ob 01.00 zvečer 16. 8.)
+   pripet           = naloga se ne prestavlja več (klik na "Danes")
+   Trenutek se NE shrani, ampak izračuna iz dneva seznama. Zato se ura
+   sama preseli z nalogo, kadar se naloga prestavi naprej. */
+const NOCNO_OKNO_DO = "04:00";     // pozneje nastavljivo; do te ure velja vprašanje Danes/Jutri
+
+/** Ali za to uro velja vprašanje Danes / Jutri? */
+function jeNocnaUra(u){ return !!u && u >= "00:00" && u <= NOCNO_OKNO_DO; }
+
+/** Koliko minut od začetka dneva seznama – za razvrščanje. */
+function minutaVDnevu(t){
+  if(!t.ura) return -1;
+  const p = t.ura.split(":");
+  return (t.uraNaslednjiDan ? 1440 : 0) + Number(p[0])*60 + Number(p[1]);
+}
+/** Pravi koledarski datum ure (lahko je naslednji dan). */
+function datumUre(t, danISO){
+  return t.uraNaslednjiDan ? iso(addDays(parseISO(danISO), 1)) : danISO;
+}
+/** Ali je ta ura na tem dnevu že mimo? */
+function uraJeMimo(danISO, ura, naslednjiDan){
+  const d = naslednjiDan ? iso(addDays(parseISO(danISO), 1)) : danISO;
+  const z = new Date();
+  return (d+"T"+ura) < (iso(z)+"T"+pad(z.getHours())+":"+pad(z.getMinutes()));
+}
+
 /** Na kateri dan "živi" naloga danes? (string primerjava dela za YYYY-MM-DD) */
 function placementOf(t, tISO){
   if(t.done) return t.doneDate || t.created;
   const sidro = t.defer || t.created;           // ročni premik prevlada nad datumom nastanka
+  if(t.pripet) return sidro;                    // pripeta naloga obtiči in se ne prestavlja
   return sidro > tISO ? sidro : tISO;
 }
 /** Map: "YYYY-MM-DD" -> {open, done, tasks:[]} */
@@ -481,7 +589,20 @@ function buildIndex(){
     e.tasks.push(t);
   }
   for(const e of map.values()){
-    e.tasks.sort((a,b)=> (a.done-b.done) || a.created.localeCompare(b.created) || a.id.localeCompare(b.id));
+    /* Vrstni red na dnevu:
+       1. neopravljene z uro   – po uri, od najzgodnejše
+       2. neopravljene brez ure – po datumu nastanka
+       3. opravljene            – čisto na dnu */
+    e.tasks.sort((a,b)=>{
+      if(a.done !== b.done) return a.done ? 1 : -1;
+      const au = !!a.ura, bu = !!b.ura;
+      if(au !== bu) return au ? -1 : 1;
+      if(au && bu){
+        const r = minutaVDnevu(a) - minutaVDnevu(b);
+        if(r) return r;
+      }
+      return a.created.localeCompare(b.created) || a.id.localeCompare(b.id);
+    });
   }
   return map;
 }
@@ -755,7 +876,10 @@ function renderDay(focusId){
         '<div class="note-main">'+
           '<span class="note-date">'+kratekDatum(t.created)+'</span>'+
           (waiting ? '<span class="note-wait">premaknjeno</span>' : '')+
-          '<div class="note-text" contenteditable="true" data-act="edit">'+escapeHTML(t.text)+'</div>'+
+          '<div class="note-line">'+
+            uraGumb(t, key)+
+            '<div class="note-text" contenteditable="true" data-act="edit">'+escapeHTML(t.text)+'</div>'+
+          '</div>'+
         '</div>'+
         (t.done ? '' : '<button class="note-move" data-act="move" title="Premakni">'+IKONA_KOLEDAR+'</button>')+
         '<button class="note-del" data-act="del">×</button>'+
@@ -773,6 +897,22 @@ function renderDay(focusId){
     if(el){ el.focus(); placeCaretEnd(el); }
   }
 }
+/* Ura na začetku besedila. Kadar ure ni, na istem mestu stoji bleda urica.
+   Oboje je isti gumb – zato sta dodajanje in spreminjanje na istem mestu. */
+const IKONA_URA =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/>'+
+  '<path d="M12 7v5l3 2"/></svg>';
+
+function uraGumb(t, danISO){
+  if(!t.ura){
+    if(t.done) return "";                       // odkljukani nalogi se ure ne da dodati
+    return '<button class="ura-btn prazna" data-act="ura" title="Dodaj uro">'+IKONA_URA+'</button>';
+  }
+  const cezPolnoc = t.uraNaslednjiDan
+    ? '<small>'+kratekDatum(datumUre(t, danISO))+'</small>' : '';
+  return '<button class="ura-btn" data-act="ura">'+t.ura.replace(":",".")+cezPolnoc+'</button>';
+}
+
 function placeCaretEnd(el){
   const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
   const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
@@ -793,6 +933,8 @@ dayBody.addEventListener("click", ev => {
     t.done = !t.done;
     t.doneDate = t.done ? state.openDay : null;
     persist(); refreshIndex(); renderDay();
+  } else if(act === "ura"){
+    if(!t.done) openUra(t.id);
   } else if(act === "move"){
     openMove(t.id);
   } else if(act === "del"){
@@ -812,7 +954,118 @@ dayBody.addEventListener("keydown", ev => {
     ev.preventDefault(); ev.target.blur();
   }
 });
+
+/* Vračalka na čisto začetku besedila pobriše celo uro naenkrat.
+   Uporabljamo beforeinput, ker se navadni keydown za vračalko na
+   telefonih ne javi zanesljivo. Gumb "Odstrani uro" je varovalka. */
+function kazalecNaZacetku(el){
+  const s = window.getSelection();
+  if(!s || !s.isCollapsed || s.rangeCount === 0) return false;
+  const r = s.getRangeAt(0).cloneRange();
+  r.selectNodeContents(el);
+  r.setEnd(s.getRangeAt(0).startContainer, s.getRangeAt(0).startOffset);
+  return r.toString().length === 0;
+}
+dayBody.addEventListener("beforeinput", ev => {
+  if(ev.inputType !== "deleteContentBackward") return;
+  const el = ev.target.closest(".note-text"); if(!el) return;
+  const t = state.tasks.find(x => x.id === el.closest(".note").dataset.id);
+  if(!t || !t.ura || !kazalecNaZacetku(el)) return;
+  ev.preventDefault();
+  odstraniUro(t);
+  renderDay();
+});
+function odstraniUro(t){
+  t.ura = null; t.uraNaslednjiDan = false; t.pripet = false;
+  persist(); refreshIndex();
+}
+
 document.getElementById("dayBack").addEventListener("click", closeDay);
+
+/* ============================================================
+   6c. OKENCE ZA URO
+   Korak 1 kolesje · korak 2 vprašanje Danes/Jutri · korak 3 obvestilo.
+   Vse v enem okencu, ki menja vsebino – nobeno okence se ne odpre
+   nad drugim.
+   ============================================================ */
+const uraModal = document.getElementById("uraModal");
+const uraPick  = document.getElementById("uraPick");
+const uraSteps = [1,2,3].map(n => document.getElementById("uraStep"+n));
+let uraId = null;
+
+function uraKorak(n){ uraSteps.forEach((el,i)=> el.hidden = (i+1 !== n)); }
+
+function openUra(id){
+  const t = state.tasks.find(x => x.id === id); if(!t) return;
+  uraId = id;
+  const naslov = t.text ? "»"+t.text+"«" : "(prazen zapisek)";
+  document.getElementById("uraLead").textContent  = naslov;
+  document.getElementById("uraLead2").textContent = naslov;
+  document.getElementById("uraOpozorilo").hidden  = true;
+  document.getElementById("uraPrikaz").textContent = t.ura ? t.ura.replace(":",".") : "kolesje ›";
+  document.getElementById("uraOdstrani").hidden   = !t.ura;
+  uraPick.value = t.ura || "";
+  uraKorak(1);
+  uraModal.classList.add("open");
+}
+function closeUra(){ uraModal.classList.remove("open"); uraId = null; }
+
+/** Uro zapiše in okence zapre. naslednjiDan = ali pade čez polnoč. */
+function zapisiUro(t, ura, naslednjiDan, pripet){
+  t.ura = ura;
+  t.uraNaslednjiDan = !!naslednjiDan;
+  if(pripet){ t.pripet = true; t.defer = state.openDay; }
+  persist(); refreshIndex(); renderDay(); refreshVisible();
+}
+
+uraPick.addEventListener("change", () => {
+  const t = state.tasks.find(x => x.id === uraId); if(!t || !uraPick.value) return;
+  const ura = uraPick.value.slice(0,5);
+
+  // nočna ura: vprašamo, kateremu dnevu pripada
+  if(jeNocnaUra(ura)){
+    const dan  = parseISO(state.openDay), jutri = addDays(dan, 1);
+    document.getElementById("uraVprasanje").textContent =
+      "Dodam danes po 23.55, jutri po 00.00?";
+    document.getElementById("uraDanesD").textContent = kratekDatum(iso(dan));
+    document.getElementById("uraJutriD").textContent = kratekDatum(iso(jutri));
+    uraKorak(2);
+    return;
+  }
+
+  // navadna ura: samo preverimo, da ni že mimo
+  if(uraJeMimo(state.openDay, ura, false)){
+    const o = document.getElementById("uraOpozorilo");
+    o.textContent = "Ura je pretekla."; o.hidden = false;
+    uraPick.value = t.ura || "";
+    return;
+  }
+  zapisiUro(t, ura, false, false);
+  closeUra();
+});
+
+uraModal.addEventListener("click", ev => {
+  if(ev.target.closest("[data-close]")){ closeUra(); return; }
+  const t = state.tasks.find(x => x.id === uraId); if(!t) return;
+
+  if(ev.target.closest("#uraOdstrani")){
+    odstraniUro(t); renderDay(); refreshVisible(); closeUra(); return;
+  }
+  if(ev.target.closest("#uraDanes")){
+    // ura pripada večeru dneva, ki ga gledamo – naloga obtiči tukaj
+    zapisiUro(t, uraPick.value.slice(0,5), true, true);
+    uraKorak(3);
+    return;
+  }
+  if(ev.target.closest("#uraJutri")){
+    // ura pripada naslednjemu dnevu – naloga se preseli tja
+    const jutri = iso(addDays(parseISO(state.openDay), 1));
+    t.defer = jutri; t.pripet = false;
+    zapisiUro(t, uraPick.value.slice(0,5), false, false);
+    closeUra();
+    return;
+  }
+});
 
 /* ============================================================
    6b. PREMIK NALOGE NA IZBRAN DATUM
@@ -825,7 +1078,10 @@ const moveDays  = document.getElementById("moveDays");
 const moveLead  = document.getElementById("moveLead");
 const movePick  = document.getElementById("movePick");
 const btnReset  = document.getElementById("btnReset");
+const moveStep1 = document.getElementById("moveStep1");
+const moveStep2 = document.getElementById("moveStep2");
 let moveId = null;
+let ciljniDan = null;     // izbrani dan, ki čaka na odločitev o uri
 
 /* ---------- dva tedna, sedem dni v vrsti ----------
    Prvo polje je dan, na katerem smo: ni izbirljivo, le označeno.
@@ -855,23 +1111,57 @@ function openMove(id){
   movePick.min   = iso(addDays(parseISO(state.openDay), 1));
   movePick.value = t.defer || "";
   btnReset.hidden = !t.defer;
+  moveStep1.hidden = false; moveStep2.hidden = true;
+  ciljniDan = null;
   moveModal.classList.add("open");
 }
-function closeMove(){ moveModal.classList.remove("open"); moveId = null; }
+function closeMove(){ moveModal.classList.remove("open"); moveId = null; ciljniDan = null; }
+
+/* Dan je izbran. Če ima naloga uro, se najprej pojavi meni
+   Izbrišem / Obdržim / Spremenim, šele nato se premik izvede. */
+function zacniPremik(dateISO){
+  const t = state.tasks.find(x => x.id === moveId); if(!t) return;
+  if(!t.ura || !dateISO){ applyMove(dateISO); return; }
+  ciljniDan = dateISO;
+  document.getElementById("moveLead2").textContent =
+    t.ura.replace(":",".")+" · premik na "+kratekDatum(dateISO);
+  document.getElementById("uroSpremeni").value = t.ura;
+  moveStep1.hidden = true;
+  moveStep2.hidden = false;
+}
 
 function applyMove(dateISO){
   const t = state.tasks.find(x => x.id === moveId); if(!t) return;
   t.defer = dateISO || null;      // prazno = prekliči odlog, spet se prestavlja sam
+  t.pripet = false;               // ročni premik vedno prekine pripetost
   persist(); refreshIndex(); closeMove(); renderDay(); refreshVisible();
 }
 
 moveModal.addEventListener("click", ev => {
   if(ev.target.closest("[data-close]")){ closeMove(); return; }
   if(ev.target.closest("#btnReset")){ applyMove(""); return; }
+
+  const t = state.tasks.find(x => x.id === moveId);
+  if(t && ev.target.closest("#uroIzbrisem")){
+    t.ura = null; t.uraNaslednjiDan = false;
+    applyMove(ciljniDan); return;
+  }
+  if(t && ev.target.closest("#uroObdrzim")){ applyMove(ciljniDan); return; }
+
   const b = ev.target.closest(".dayline [data-date]");
-  if(b && b.dataset.date) applyMove(b.dataset.date);
+  if(b && b.dataset.date) zacniPremik(b.dataset.date);
 });
-movePick.addEventListener("change", () => { if(movePick.value) applyMove(movePick.value); });
+movePick.addEventListener("change", () => { if(movePick.value) zacniPremik(movePick.value); });
+
+/* "Spremenim": meni ostane odprt pod kolesjem. Če uporabnik kolesje
+   prekliče, brskalnik ne javi ničesar – meni je še vedno tam, zato
+   preklica ni treba zaznavati. Ob izbiri ure se premik izvede. */
+document.getElementById("uroSpremeni").addEventListener("change", ev => {
+  const t = state.tasks.find(x => x.id === moveId); if(!t || !ev.target.value) return;
+  t.ura = ev.target.value.slice(0,5);
+  t.uraNaslednjiDan = false;
+  applyMove(ciljniDan);
+});
 
 /* Opomba: lasten koledarski izbirnik je bil odstranjen iz te datoteke.
    Zdaj se za "Drug datum" uporablja sistemski izbirnik telefona
