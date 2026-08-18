@@ -1003,14 +1003,29 @@ function kazalecNaZacetku(el){
   r.setEnd(s.getRangeAt(0).startContainer, s.getRangeAt(0).startOffset);
   return r.toString().length === 0;
 }
-dayBody.addEventListener("beforeinput", ev => {
-  if(ev.inputType !== "deleteContentBackward") return;
-  const el = ev.target.closest(".note-text"); if(!el) return;
+function poskusiOdstranitiUro(el, ev){
   const t = state.tasks.find(x => x.id === el.closest(".note").dataset.id);
-  if(!t || !t.ura || !kazalecNaZacetku(el)) return;
+  if(!t || !t.ura || !kazalecNaZacetku(el)) return false;
   ev.preventDefault();
   odstraniUro(t);
   renderDay();
+  // kazalec vrnemo na začetek besedila, da lahko takoj tipkate naprej
+  const nov = dayBody.querySelector('[data-id="'+t.id+'"] .note-text');
+  if(nov){ nov.focus();
+    const r = document.createRange(); r.selectNodeContents(nov); r.collapse(true);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }
+  return true;
+}
+dayBody.addEventListener("keydown", ev => {
+  if(ev.key !== "Backspace") return;
+  const el = ev.target.closest(".note-text"); if(!el) return;
+  poskusiOdstranitiUro(el, ev);
+});
+dayBody.addEventListener("beforeinput", ev => {
+  if(ev.inputType !== "deleteContentBackward") return;
+  const el = ev.target.closest(".note-text"); if(!el) return;
+  poskusiOdstranitiUro(el, ev);
 });
 function odstraniUro(t){
   t.ura = null; t.uraNaslednjiDan = false; t.pripet = false;
@@ -1031,6 +1046,7 @@ const koloH = document.getElementById("koloH");
 const koloM = document.getElementById("koloM");
 let uraId = null;
 let premikCaka = null;   // dan, na katerega naj se premakne po potrditvi ure
+let uraIzbrana = null;   // zapomnjena ura – skrito kolesje se zavrti nazaj na 0
 
 function uraKorak(n){ uraSteps.forEach((el,i)=> el.hidden = (i+1 !== n)); }
 
@@ -1044,6 +1060,14 @@ const MINUTE = Array.from({length:12}, (_,i)=> pad(i*5));
 function napolniKolo(){
   koloH.innerHTML = URE.map(u=>'<b>'+u+'</b>').join("");
   koloM.innerHTML = MINUTE.map(m=>'<b>'+m+'</b>').join("");
+}
+/** Kje naj se kolesje odpre, kadar naloga ure še nima. */
+function privzetaUra(){
+  if(uraDan() !== todayISO()) return "12:00";
+  const z = new Date();
+  let h = z.getHours(), m = Math.round(z.getMinutes()/5)*5;
+  if(m >= 60){ m = 0; h = (h+1) % 24; }
+  return pad(h)+":"+pad(m);
 }
 function nastaviKolo(ura){
   const [h,m] = (ura || "12:00").split(":").map(Number);
@@ -1083,7 +1107,7 @@ function openUra(id){
   napolniKolo();
   uraKorak(1);
   uraModal.classList.add("open");
-  requestAnimationFrame(()=> nastaviKolo(t.ura));   // šele ko je okence vidno
+  requestAnimationFrame(()=> nastaviKolo(t.ura || privzetaUra()));  // šele ko je okence vidno
 }
 /** Dan, na katerega se ura nanaša: ob čakajočem premiku je to ciljni dan. */
 function uraDan(){ return premikCaka || state.openDay; }
@@ -1111,7 +1135,7 @@ uraModal.addEventListener("click", ev => {
   }
 
   if(ev.target.closest("#uraPotrdi")){
-    const ura = beriKolo();
+    const ura = uraIzbrana = beriKolo();
     // nočna ura: vprašamo, kateremu dnevu pripada
     if(jeNocnaUra(ura)){
       const dan = parseISO(uraDan()), jutri = addDays(dan, 1);
@@ -1132,7 +1156,7 @@ uraModal.addEventListener("click", ev => {
   }
 
   if(ev.target.closest("#uraDanes")){
-    zapisiUro(t, beriKolo(), true, true);   // ura pripada večeru tega dne
+    zapisiUro(t, uraIzbrana, true, true);   // ura pripada večeru tega dne
     uraKorak(3);
     return;
   }
@@ -1140,7 +1164,7 @@ uraModal.addEventListener("click", ev => {
     t.defer = iso(addDays(parseISO(uraDan()), 1));
     t.pripet = false;
     premikCaka = null;                 // dan je s tem že določen
-    zapisiUro(t, beriKolo(), false, false); // ura pripada naslednjemu dnevu
+    zapisiUro(t, uraIzbrana, false, false); // ura pripada naslednjemu dnevu
     closeUra();
     return;
   }
