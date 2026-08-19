@@ -324,11 +324,6 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
    Polje za datum je raztegnjeno čez ves gumb in prosojno, zato se
    sistemski koledar odpre ob dotiku kjerkoli po vrstici, ne le na ikoni. */
 .pickwrap{position:relative}
-/* polje, ki je le nosilec sistemskega izbirnika – odpremo ga z ukazom */
-.skrito-polje{
-  position:absolute;left:18px;top:10px;width:1px;height:1px;
-  opacity:0;border:0;margin:0;padding:0;pointer-events:none;
-}
 .pickwrap input{
   position:absolute;inset:0;width:100%;height:100%;
   opacity:0;border:0;margin:0;padding:0;
@@ -367,6 +362,32 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 }
 .kolo-stolpec b.on{color:var(--text);font-weight:750}
 .opt.potrdi{background:var(--accent);color:#fff;justify-content:center;font-weight:700}
+
+/* ---- koledar za "Drug datum" (lastna komponenta) ---- */
+.cal{-webkit-user-select:none;user-select:none}
+.cal-head{display:flex;align-items:center;gap:6px;padding:2px 2px 12px}
+.cal-title{flex:1;text-align:center;font-size:17px;font-weight:700;letter-spacing:-.01em}
+.cal-nav{
+  width:38px;height:38px;border-radius:50%;background:var(--bg);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex:0 0 auto;
+}
+.cal-nav:active{background:var(--accent-soft)}
+.cal-nav[disabled]{color:var(--line);pointer-events:none}
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:5px}
+.cal-dow span{text-align:center;font-size:11px;font-weight:700;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.04em}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-day{
+  aspect-ratio:1/1;border-radius:10px;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;
+}
+.cal-day:active{background:var(--accent-soft)}
+.cal-day.pad{background:transparent;pointer-events:none}
+.cal-day.today{box-shadow:inset 0 0 0 1.5px var(--accent);color:var(--accent)}
+.cal-day.sel{background:var(--accent);color:#fff;font-weight:750}
+/* .off je namenoma zadnji, da posivi tudi današnji dan, če ni izbirljiv */
+.cal-day.off{color:var(--line);background:transparent;pointer-events:none}
+.cal-nazaj{margin-top:10px}
 
 .add-btn{
   display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
@@ -417,10 +438,6 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   <div class="modal-bg" data-close="1"></div>
   <div class="modal-card">
     <div class="grip"></div>
-    <!-- Polje za sistemski koledar živi ZUNAJ korakov. Če je znotraj koraka,
-         ki se skrije, ga brskalnik sredi dela ugasne in izbira se izgubi. -->
-    <input type="date" id="movePick" class="skrito-polje">
-
     <!-- korak 1: izbira dneva -->
     <div id="moveStep1">
       <h3>Premakni nalogo</h3>
@@ -429,12 +446,20 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
       <div class="oznaka">Naslednja dva tedna</div>
       <div class="dayline" id="moveDays"></div>
 
-      <button class="opt" id="movePickOdpri">
+      <button class="opt" id="odpriKoledar">
         <span>Drug datum</span><span class="chev">koledar ›</span>
       </button>
 
       <button class="opt reset" id="btnReset" hidden>↺ Nazaj na današnji dan</button>
       <button class="opt cancel" data-close="1">Prekliči</button>
+    </div>
+
+    <!-- korak 3: koledar (lastna komponenta, ne sistemska) -->
+    <div id="moveStep3" hidden>
+      <h3>Izberi datum</h3>
+      <p class="lead" id="moveLead3"></p>
+      <div id="moveCalHost"></div>
+      <button class="opt cancel cal-nazaj" id="moveCalNazaj">‹ Nazaj</button>
     </div>
 
     <!-- korak 2: kaj z uro, preden se premik izvede -->
@@ -1192,10 +1217,10 @@ uraModal.addEventListener("click", ev => {
 const moveModal = document.getElementById("moveModal");
 const moveDays  = document.getElementById("moveDays");
 const moveLead  = document.getElementById("moveLead");
-const movePick  = document.getElementById("movePick");
 const btnReset  = document.getElementById("btnReset");
 const moveStep1 = document.getElementById("moveStep1");
 const moveStep2 = document.getElementById("moveStep2");
+const moveStep3 = document.getElementById("moveStep3");
 let moveId = null;
 let ciljniDan = null;     // izbrani dan, ki čaka na odločitev o uri
 
@@ -1217,24 +1242,27 @@ function risiVrsticoDni(baza){
   moveDays.innerHTML = html;
 }
 
+function moveKorak(n){
+  moveStep1.hidden = (n !== 1);
+  moveStep2.hidden = (n !== 2);
+  moveStep3.hidden = (n !== 3);
+}
+
 function openMove(id){
   const t = state.tasks.find(x => x.id === id); if(!t) return;
   moveId = id;
   moveLead.textContent = t.text ? "»"+t.text+"«" : "(prazen zapisek)";
 
   risiVrsticoDni(parseISO(state.openDay));
-  // sistemski izbirnik: nazaj se ne da, najzgodnejši je jutrišnji dan
-  movePick.min   = iso(addDays(parseISO(state.openDay), 1));
-  movePick.value = t.defer || "";
   btnReset.hidden = !t.defer;
-  moveStep1.hidden = false; moveStep2.hidden = true;
+  moveKorak(1);
   ciljniDan = null;
   moveModal.classList.add("open");
 }
 function closeMove(){
   moveModal.classList.remove("open");
   moveId = null; ciljniDan = null;
-  moveStep1.hidden = false; moveStep2.hidden = true;   // nikoli ne obtiči na koraku 2
+  moveKorak(1);                                      // nikoli ne obtiči na poznejšem koraku
 }
 
 /* Dan je izbran. Če ima naloga uro, se najprej pojavi meni
@@ -1245,8 +1273,7 @@ function zacniPremik(dateISO){
   ciljniDan = dateISO;
   document.getElementById("moveLead2").textContent =
     t.ura.replace(":",".")+" · premik na "+kratekDatum(dateISO);
-  moveStep1.hidden = true;
-  moveStep2.hidden = false;
+  moveKorak(2);
 }
 
 function applyMove(dateISO){
@@ -1259,9 +1286,20 @@ function applyMove(dateISO){
 moveModal.addEventListener("click", ev => {
   if(ev.target.closest("[data-close]")){ closeMove(); return; }
   if(ev.target.closest("#btnReset")){ applyMove(""); return; }
-  if(ev.target.closest("#movePickOdpri")){
-    try { movePick.showPicker(); }
-    catch(e){ movePick.focus(); movePick.click(); }
+  if(ev.target.closest("#moveCalNazaj")){ moveKorak(1); return; }
+  if(ev.target.closest("#odpriKoledar")){
+    const naloga = state.tasks.find(x => x.id === moveId); if(!naloga) return;
+    document.getElementById("moveLead3").textContent =
+      naloga.text ? "»"+naloga.text+"«" : "(prazen zapisek)";
+    const host = document.getElementById("moveCalHost");
+    host.innerHTML = "";
+    host.appendChild(KoledarIzbirnik({
+      min: iso(addDays(parseISO(state.openDay), 1)),   // nazaj se ne da
+      izbrano: naloga.defer || null,
+      danes: todayISO(),
+      izbira: d => zacniPremik(d)
+    }));
+    moveKorak(3);
     return;
   }
 
@@ -1287,14 +1325,85 @@ moveModal.addEventListener("click", ev => {
   const b = ev.target.closest(".dayline [data-date]");
   if(b && b.dataset.date) zacniPremik(b.dataset.date);
 });
-movePick.addEventListener("change", () => {
-  if(!movePick.value || !moveStep2.hidden) return;   // brez vrednosti ali že na koraku 2
-  zacniPremik(movePick.value);
-});
 
 
 
-/* Opomba: lasten koledarski izbirnik je bil odstranjen iz te datoteke.
+
+/* ============================================================
+   6d. KOLEDARSKI IZBIRNIK – lastna komponenta
+   Sistemski koledar se v gumbu "Drug datum" ni odprl zanesljivo,
+   zato uporabljamo lastnega, tako kot pri kolesju za uro.
+   Ista koda živi tudi samostojno v koledar-izbirnik.html.
+   ============================================================ */
+function KoledarIzbirnik(nastavitve){
+  const o = nastavitve || {};
+  const MES = ["januar","februar","marec","april","maj","junij",
+               "julij","avgust","september","oktober","november","december"];
+  const DNI = ["pon","tor","sre","čet","pet","sob","ned"];
+  const p2  = n => String(n).padStart(2,"0");
+
+  // kateri mesec pokažemo, ko se koledar odpre
+  const zacetni = o.izbrano || o.min || o.danes;
+  let leto, mesec;
+  if(zacetni){ const d = zacetni.split("-"); leto = +d[0]; mesec = +d[1]-1; }
+  else { const n = new Date(); leto = n.getFullYear(); mesec = n.getMonth(); }
+
+  const el = document.createElement("div");
+  el.className = "cal";
+
+  function risi(){
+    const prvi    = new Date(leto, mesec, 1);
+    const zamik   = (prvi.getDay()+6)%7;                 // ponedeljek = 0
+    const dolzina = new Date(leto, mesec+1, 0).getDate();
+
+    const prviVMesecu   = leto+"-"+p2(mesec+1)+"-01";
+    const zadnjiVMesecu = leto+"-"+p2(mesec+1)+"-"+p2(dolzina);
+    const nazajNi  = (o.min && prviVMesecu   <= o.min) ? "disabled" : "";
+    const naprejNi = (o.max && zadnjiVMesecu >= o.max) ? "disabled" : "";
+
+    let celice = "";
+    for(let k=0;k<zamik;k++) celice += '<div class="cal-day pad"></div>';
+    for(let d=1; d<=dolzina; d++){
+      const datum = leto+"-"+p2(mesec+1)+"-"+p2(d);
+      let razred = "cal-day";
+      if((o.min && datum < o.min) || (o.max && datum > o.max)) razred += " off";
+      if(datum === o.danes)   razred += " today";
+      if(datum === o.izbrano) razred += " sel";
+      celice += '<button class="'+razred+'" data-d="'+datum+'">'+d+'</button>';
+    }
+
+    el.innerHTML =
+      '<div class="cal-head">'+
+        '<button class="cal-nav" data-skok="-1" '+nazajNi+'>‹</button>'+
+        '<div class="cal-title">'+MES[mesec].charAt(0).toUpperCase()+MES[mesec].slice(1)+' '+leto+'</div>'+
+        '<button class="cal-nav" data-skok="1" '+naprejNi+'>›</button>'+
+      '</div>'+
+      '<div class="cal-dow">'+DNI.map(s=>"<span>"+s+"</span>").join("")+'</div>'+
+      '<div class="cal-grid">'+celice+'</div>';
+  }
+
+  el.addEventListener("click", ev => {
+    const nav = ev.target.closest("[data-skok]");
+    if(nav){
+      mesec += Number(nav.dataset.skok);
+      if(mesec < 0){ mesec = 11; leto--; }
+      if(mesec > 11){ mesec = 0;  leto++; }
+      risi();
+      return;
+    }
+    const dan = ev.target.closest("[data-d]");
+    if(dan){
+      o.izbrano = dan.dataset.d;                 // da se izbira takoj obarva
+      risi();
+      if(typeof o.izbira === "function") o.izbira(dan.dataset.d);
+    }
+  });
+
+  risi();
+  return el;
+}
+
+/* Opomba: sistemski izbirnik datuma je bil odstranjen.
    Zdaj se za "Drug datum" uporablja sistemski izbirnik telefona
    (<input type="date"> zgoraj v oknu za premik).
    Celotna koda lastnega koledarja je shranjena v datoteki
