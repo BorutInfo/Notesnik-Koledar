@@ -324,6 +324,11 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
    Polje za datum je raztegnjeno čez ves gumb in prosojno, zato se
    sistemski koledar odpre ob dotiku kjerkoli po vrstici, ne le na ikoni. */
 .pickwrap{position:relative}
+/* polje, ki je le nosilec sistemskega izbirnika – odpremo ga z ukazom */
+.skrito-polje{
+  position:absolute;left:18px;top:10px;width:1px;height:1px;
+  opacity:0;border:0;margin:0;padding:0;pointer-events:none;
+}
 .pickwrap input{
   position:absolute;inset:0;width:100%;height:100%;
   opacity:0;border:0;margin:0;padding:0;
@@ -412,6 +417,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   <div class="modal-bg" data-close="1"></div>
   <div class="modal-card">
     <div class="grip"></div>
+    <!-- Polje za sistemski koledar živi ZUNAJ korakov. Če je znotraj koraka,
+         ki se skrije, ga brskalnik sredi dela ugasne in izbira se izgubi. -->
+    <input type="date" id="movePick" class="skrito-polje">
 
     <!-- korak 1: izbira dneva -->
     <div id="moveStep1">
@@ -421,10 +429,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
       <div class="oznaka">Naslednja dva tedna</div>
       <div class="dayline" id="moveDays"></div>
 
-      <label class="opt pickwrap">
+      <button class="opt" id="movePickOdpri">
         <span>Drug datum</span><span class="chev">koledar ›</span>
-        <input type="date" id="movePick">
-      </label>
+      </button>
 
       <button class="opt reset" id="btnReset" hidden>↺ Nazaj na današnji dan</button>
       <button class="opt cancel" data-close="1">Prekliči</button>
@@ -1224,7 +1231,11 @@ function openMove(id){
   ciljniDan = null;
   moveModal.classList.add("open");
 }
-function closeMove(){ moveModal.classList.remove("open"); moveId = null; ciljniDan = null; }
+function closeMove(){
+  moveModal.classList.remove("open");
+  moveId = null; ciljniDan = null;
+  moveStep1.hidden = false; moveStep2.hidden = true;   // nikoli ne obtiči na koraku 2
+}
 
 /* Dan je izbran. Če ima naloga uro, se najprej pojavi meni
    Izbrišem / Obdržim / Spremenim, šele nato se premik izvede. */
@@ -1248,14 +1259,24 @@ function applyMove(dateISO){
 moveModal.addEventListener("click", ev => {
   if(ev.target.closest("[data-close]")){ closeMove(); return; }
   if(ev.target.closest("#btnReset")){ applyMove(""); return; }
+  if(ev.target.closest("#movePickOdpri")){
+    try { movePick.showPicker(); }
+    catch(e){ movePick.focus(); movePick.click(); }
+    return;
+  }
 
   const t = state.tasks.find(x => x.id === moveId);
+  // če se je vmes izgubila naloga ali ciljni dan, okence zapremo, ne pa tiho molčimo
+  if(ev.target.closest("#uroIzbrisem") || ev.target.closest("#uroObdrzim")){
+    if(!t || !ciljniDan){ closeMove(); return; }
+  }
   if(t && ev.target.closest("#uroIzbrisem")){
     t.ura = null; t.uraNaslednjiDan = false;
     applyMove(ciljniDan); return;
   }
   if(t && ev.target.closest("#uroObdrzim")){ applyMove(ciljniDan); return; }
   if(ev.target.closest("#uroSpremeniOdpri")){
+    if(!t || !ciljniDan){ closeMove(); return; }
     premikCaka = ciljniDan;            // po potrditvi ure se izvede še premik
     const id = moveId;
     closeMove();
@@ -1266,7 +1287,10 @@ moveModal.addEventListener("click", ev => {
   const b = ev.target.closest(".dayline [data-date]");
   if(b && b.dataset.date) zacniPremik(b.dataset.date);
 });
-movePick.addEventListener("change", () => { if(movePick.value) zacniPremik(movePick.value); });
+movePick.addEventListener("change", () => {
+  if(!movePick.value || !moveStep2.hidden) return;   // brez vrednosti ali že na koraku 2
+  zacniPremik(movePick.value);
+});
 
 
 
