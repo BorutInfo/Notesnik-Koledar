@@ -228,7 +228,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 
 /* alineje */
 .notes{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
-.note{display:flex;align-items:flex-start;gap:10px;padding:12px 12px;border-bottom:1px solid var(--line)}
+/* scroll-margin-bottom je namenoma 0: nov zapisek se poravna točno s
+   spodnjim robom vidnega dela, da pod njim ne pokuka odkljukani zapisek. */
+.note{display:flex;align-items:flex-start;gap:10px;padding:12px 12px;border-bottom:1px solid var(--line);
+  scroll-margin-bottom:0}
 .note:last-child{border-bottom:0}
 .chk{
   flex:0 0 auto;width:22px;height:22px;margin-top:1px;border-radius:50%;
@@ -638,7 +641,8 @@ const Store = (() => {
 const state = {
   tasks: Store.load()?.tasks || [],
   view: "teden",
-  openDay: null
+  openDay: null,
+  pisemo: null          // zapisek, ki ga prav zdaj pisemo (pot A)
 };
 function persist(){ Store.save({ tasks: state.tasks }); }
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
@@ -735,6 +739,11 @@ function buildIndex(){
        2. neopravljene brez ure – po datumu nastanka
        3. opravljene            – čisto na dnu */
     e.tasks.sort((a,b)=>{
+      /* Zapisek, ki ga prav zdaj pišemo, stoji čisto na dnu. Tako pod
+         njim ni ničesar in ga tipkovnica ne more prekriti. Ko pisanje
+         končate, se ob naslednjem risanju postavi na svoje mesto. */
+      if(a.id === state.pisemo) return 1;
+      if(b.id === state.pisemo) return -1;
       if(a.done !== b.done) return a.done ? 1 : -1;
       const au = !!a.ura, bu = !!b.ura;
       if(au !== bu) return au ? -1 : 1;
@@ -984,6 +993,7 @@ const IKONA_KOLEDAR =
 
 function openDay(key){
   state.openDay = key;
+  aktivniSeznam = "dan";
   const d = parseISO(key);
   dayTitle.textContent = d.getDate()+". "+MES_POLNO[d.getMonth()]+" "+d.getFullYear();
   renderDay();
@@ -992,9 +1002,44 @@ function openDay(key){
 function closeDay(){
   daySheet.classList.remove("open");
   state.openDay = null;
+  state.pisemo = null;
+  aktivniSeznam = "dan";
   refreshIndex();
   refreshVisible();
 }
+/* ---------- ENA SAMA VRSTICA ZAPISKA ----------
+   Isti zapisek izgleda in se ureja popolnoma enako, ne glede na to,
+   ali pridete vanj iz dneva ali iz "Vse naloge". Zato je koda ena
+   sama in se popravlja na enem mestu.
+   zPrehodom = ali naj vrstica dobi ime za prehod pogleda. To sme biti
+   samo na enem seznamu naenkrat, sicer se imena podvojijo in brskalnik
+   prehod opusti. Dnevni list ga ima, "Vse naloge" ne. */
+function vrsticaZapiska(t, zPrehodom){
+  const tISO = todayISO();
+  const dan  = danZapiska(t);
+  const carried = !t.done && !t.defer && t.created < dan;   // prenesena iz prejšnjih dni
+  const waiting = !t.done && t.defer && t.defer > tISO;     // čaka na svoj datum
+  return '<div class="note'+(t.done?" done":"")+(carried?" carried":"")+'" data-id="'+t.id+'"'+
+    (zPrehodom ? ' style="view-transition-name:z-'+t.id+'"' : '')+'>'+
+    '<button class="chk" data-act="toggle">✓</button>'+
+    '<div class="note-main">'+
+      '<span class="note-date" data-act="odpriDan">'+kratekDatum(t.created)+'</span>'+
+      (waiting ? '<span class="note-wait" data-act="odpriDan">premaknjeno &middot; '+kratekDatum(t.defer)+'</span>' : '')+
+      '<div class="note-line">'+
+        uraGumb(t, dan)+
+        '<div class="note-text" contenteditable="true" data-act="edit">'+escapeHTML(t.text)+'</div>'+
+      '</div>'+
+    '</div>'+
+    (t.done ? '' : '<button class="note-move" data-act="move" title="Premakni">'+IKONA_KOLEDAR+'</button>')+
+    '<button class="note-del" data-act="del">×</button>'+
+  '</div>';
+}
+
+/* Dan, na katerem zapisek trenutno leži. Isti izračun velja za dnevni
+   list in za "Vse naloge", zato okencema za uro in premik ni treba
+   vedeti, s katerega seznama sta bila odprta. */
+function danZapiska(t){ return placementOf(t, todayISO()); }
+
 function renderDay(focusId){
   const key = state.openDay, d = parseISO(key), tISO = todayISO();
   const e = INDEX.get(key);
@@ -1007,28 +1052,7 @@ function renderDay(focusId){
 
   if(tasks.length){
     html += '<div class="notes">';
-    for(const t of tasks){
-      const carried = !t.done && !t.defer && t.created < key;   // prenesena iz prejšnjih dni
-      const waiting = !t.done && t.defer && t.defer > tISO;     // čaka na svoj datum
-      /* Ime, po katerem brskalnik prepozna, da je to isti zapisek pred
-         prerisovanjem in po njem. Zato ga zna preseliti, namesto da bi
-         ga zbrisal in narisal novega. Predpona, ker se ime ne sme
-         začeti s številko. Imena so samo tu, da se nikjer ne podvojijo. */
-      html += '<div class="note'+(t.done?" done":"")+(carried?" carried":"")+'" data-id="'+t.id+'"'+
-        ' style="view-transition-name:z-'+t.id+'">'+
-        '<button class="chk" data-act="toggle">✓</button>'+
-        '<div class="note-main">'+
-          '<span class="note-date">'+kratekDatum(t.created)+'</span>'+
-          (waiting ? '<span class="note-wait">premaknjeno</span>' : '')+
-          '<div class="note-line">'+
-            uraGumb(t, key)+
-            '<div class="note-text" contenteditable="true" data-act="edit">'+escapeHTML(t.text)+'</div>'+
-          '</div>'+
-        '</div>'+
-        (t.done ? '' : '<button class="note-move" data-act="move" title="Premakni">'+IKONA_KOLEDAR+'</button>')+
-        '<button class="note-del" data-act="del">×</button>'+
-      '</div>';
-    }
+    for(const t of tasks) html += vrsticaZapiska(t, true);
     html += '</div>';
   } else {
     html += '<div class="empty">Ni zapiskov za ta dan.</div>';
@@ -1042,22 +1066,29 @@ function renderDay(focusId){
   }
 }
 
-/* Prerisovanje dnevnega lista.
+/* Kateri seznam je odprt: dnevni list ali "Vse naloge".
+   Od tega je odvisno samo, kaj se prerisuje – urejanje je enako. */
+let aktivniSeznam = "dan";
+function telesoSeznama(){ return aktivniSeznam === "vse" ? allBody : dayBody; }
+
+/* Prerisovanje odprtega seznama.
    zAnimacijo = zapisek res zamenja mesto. Takrat prerisovanje ovijemo
    v prehod pogleda in zapisek vidno odpotuje. Kadar se ne premakne
    nikamor, prerišemo naravnost – brez animacije, brez utripa. */
-function prerisiDan(zAnimacijo){
+function prerisiSeznam(zAnimacijo){
+  const risi = () => { if(aktivniSeznam === "vse") openAll(); else renderDay(); };
   if(zAnimacijo && document.startViewTransition &&
      !matchMedia("(prefers-reduced-motion: reduce)").matches){
-    document.startViewTransition(() => renderDay());
+    document.startViewTransition(risi);
   } else {
-    renderDay();
+    risi();
   }
 }
 
-/* Vrstni red zapiskov na odprtem dnevu – za primerjavo pred in po. */
+/* Vrstni red zapiskov na dnevu, kjer zapisek leži – za primerjavo pred in po. */
 function vrstniRedDneva(){
-  const e = INDEX.get(state.openDay);
+  const dan = aktivniSeznam === "vse" ? null : state.openDay;
+  const e = dan ? INDEX.get(dan) : null;
   return e ? e.tasks.map(x => x.id) : [];
 }
 /* Ura na začetku besedila. Kadar ure ni, na istem mestu stoji bleda urica.
@@ -1081,45 +1112,68 @@ function placeCaretEnd(el){
   const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
 }
 
-dayBody.addEventListener("click", ev => {
-  const add = ev.target.closest("#addNote");
-  if(add){
-    const t = { id:uid(), text:"", created:state.openDay, done:false, doneDate:null, defer:null };
-    state.tasks.push(t); persist(); refreshIndex(); renderDay(t.id);
-    return;
-  }
+/* ---------- SKUPNO ROKOVANJE ZA OBA SEZNAMA ----------
+   Kljukica, ura, premik, brisanje in pisanje delajo enako v dnevnem
+   listu in v "Vse naloge". Razlika je samo v dveh stvareh:
+   – gumb "Nov zapisek" je le v dnevnem listu,
+   – v "Vse naloge" klik na datum odpre dan, na katerem zapisek leži. */
+function klikVZapisku(ev){
   const note = ev.target.closest(".note"); if(!note) return;
   const act = ev.target.closest("[data-act]")?.dataset.act;
   const t = state.tasks.find(x => x.id === note.dataset.id); if(!t) return;
 
   if(act === "toggle"){
     const prej = vrstniRedDneva().indexOf(t.id);
+    /* Dan moramo prebrati PREJ, ko je zapisek še neopravljen. Potem
+       ga izračun ne najde več tam, kjer leži, ampak na dnevu nastanka. */
+    const dan = danZapiska(t);
     t.done = !t.done;
-    t.doneDate = t.done ? state.openDay : null;
+    t.doneDate = t.done ? dan : null;
     persist(); refreshIndex();
     // animiramo samo, kadar zapisek res zamenja mesto
-    prerisiDan(vrstniRedDneva().indexOf(t.id) !== prej);
+    prerisiSeznam(vrstniRedDneva().indexOf(t.id) !== prej);
   } else if(act === "ura"){
     if(!t.done) openUra(t.id);
   } else if(act === "move"){
     openMove(t.id);
   } else if(act === "del"){
     state.tasks = state.tasks.filter(x => x.id !== t.id);
-    persist(); refreshIndex(); renderDay();
+    persist(); refreshIndex(); prerisiSeznam(false);
+  } else if(act === "odpriDan" && aktivniSeznam === "vse"){
+    const kam = danZapiska(t);
+    allSheet.classList.remove("open"); aktivniSeznam = "dan";
+    openDay(kam);
   }
-});
-dayBody.addEventListener("input", ev => {
+}
+function pisanjeVZapisku(ev){
   const el = ev.target.closest(".note-text"); if(!el) return;
-  const id = el.closest(".note").dataset.id;
-  const t = state.tasks.find(x => x.id === id); if(!t) return;
+  const t = state.tasks.find(x => x.id === el.closest(".note").dataset.id); if(!t) return;
   t.text = el.textContent.trim();
-  persist();
-});
-dayBody.addEventListener("keydown", ev => {
+  persist();                       // brez prerisovanja, da kazalec ne skoči
+}
+function enterVZapisku(ev){
   if(ev.key === "Enter" && ev.target.closest(".note-text")){
     ev.preventDefault(); ev.target.blur();
   }
+}
+
+dayBody.addEventListener("click", ev => {
+  if(ev.target.closest("#addNote")){
+    const t = { id:uid(), text:"", created:state.openDay, done:false, doneDate:null, defer:null };
+    state.tasks.push(t); state.pisemo = t.id;
+    persist(); refreshIndex(); renderDay(t.id);
+    return;
+  }
+  klikVZapisku(ev);
 });
+/* Konec pisanja. Brez prerisovanja, da zapisek ne poskoči pred očmi –
+   na svoje mesto se postavi ob naslednjem risanju seznama. */
+function konecPisanja(ev){
+  if(ev.target.closest(".note-text")) state.pisemo = null;
+}
+dayBody.addEventListener("focusout", konecPisanja);
+dayBody.addEventListener("input", pisanjeVZapisku);
+dayBody.addEventListener("keydown", enterVZapisku);
 
 /* Vračalka na čisto začetku besedila pobriše celo uro naenkrat.
    Uporabljamo beforeinput, ker se navadni keydown za vračalko na
@@ -1137,25 +1191,27 @@ function poskusiOdstranitiUro(el, ev){
   if(!t || !t.ura || !kazalecNaZacetku(el)) return false;
   ev.preventDefault();
   odstraniUro(t);
-  renderDay();
+  prerisiSeznam(false);
   // kazalec vrnemo na začetek besedila, da lahko takoj tipkate naprej
-  const nov = dayBody.querySelector('[data-id="'+t.id+'"] .note-text');
+  const nov = telesoSeznama().querySelector('[data-id="'+t.id+'"] .note-text');
   if(nov){ nov.focus();
     const r = document.createRange(); r.selectNodeContents(nov); r.collapse(true);
     const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
   }
   return true;
 }
-dayBody.addEventListener("keydown", ev => {
+function vracalkaVZapisku(ev){
   if(ev.key !== "Backspace") return;
   const el = ev.target.closest(".note-text"); if(!el) return;
   poskusiOdstranitiUro(el, ev);
-});
-dayBody.addEventListener("beforeinput", ev => {
+}
+function vracalkaPredVnosom(ev){
   if(ev.inputType !== "deleteContentBackward") return;
   const el = ev.target.closest(".note-text"); if(!el) return;
   poskusiOdstranitiUro(el, ev);
-});
+}
+dayBody.addEventListener("keydown", vracalkaVZapisku);
+dayBody.addEventListener("beforeinput", vracalkaPredVnosom);
 function odstraniUro(t){
   t.ura = null; t.uraNaslednjiDan = false; t.pripet = false;
   persist(); refreshIndex();
@@ -1239,7 +1295,11 @@ function openUra(id){
   requestAnimationFrame(()=> nastaviKolo(t.ura || privzetaUra()));  // šele ko je okence vidno
 }
 /** Dan, na katerega se ura nanaša: ob čakajočem premiku je to ciljni dan. */
-function uraDan(){ return premikCaka || state.openDay; }
+function uraDan(){
+  if(premikCaka) return premikCaka;
+  const t = state.tasks.find(x => x.id === uraId);
+  return t ? danZapiska(t) : state.openDay;
+}
 
 /* izvedi = ali naj se premik, ki je čakal na uro, res izvede.
    Preklic v kolesju premika NE izvede – vrne se v meni Izbrišem /
@@ -1258,7 +1318,7 @@ function zapisiUro(t, ura, naslednjiDan, pripet){
   t.ura = ura;
   t.uraNaslednjiDan = !!naslednjiDan;
   if(pripet){ t.pripet = true; t.defer = uraDan(); }
-  persist(); refreshIndex(); renderDay(); refreshVisible();
+  persist(); refreshIndex(); prerisiSeznam(false); refreshVisible();
 }
 
 uraModal.addEventListener("click", ev => {
@@ -1267,7 +1327,7 @@ uraModal.addEventListener("click", ev => {
 
   if(ev.target.closest("#uraOdstrani")){
     // brisanje ure je isto kot "Izbrišem" v meniju – premik se izvede
-    odstraniUro(t); renderDay(); refreshVisible(); closeUra(true); return;
+    odstraniUro(t); prerisiSeznam(false); refreshVisible(); closeUra(true); return;
   }
 
   if(ev.target.closest("#uraPotrdi")){
@@ -1356,7 +1416,7 @@ function openMove(id){
   moveId = id;
   moveLead.textContent = t.text ? "»"+t.text+"«" : "(prazen zapisek)";
 
-  risiVrsticoDni(parseISO(state.openDay));
+  risiVrsticoDni(parseISO(danZapiska(t)));
   btnReset.hidden = !t.defer;
   moveKorak(1);
   ciljniDan = null;
@@ -1376,7 +1436,7 @@ function nazajVMeniZaUro(id, dan){
   if(!t || !t.ura){ return; }
   moveId = id; ciljniDan = dan;
   moveLead.textContent = t.text ? "»"+t.text+"«" : "(prazen zapisek)";
-  risiVrsticoDni(parseISO(state.openDay));
+  risiVrsticoDni(parseISO(danZapiska(t)));
   btnReset.hidden = !t.defer;
   document.getElementById("moveLead2").textContent =
     t.ura.replace(":",".")+" · premik na "+kratekDatum(dan);
@@ -1403,7 +1463,7 @@ function applyMove(dateISO){
   /* Povemo, kam je zapisek RES pristal, ne kam ste kliknili.
      Pri gumbu "Nazaj na prvotni/današnji dan" to ni isto – dan se izračuna. */
   obvesti("Prestavljeno na " + kratekDatum(placementOf(t, todayISO())));
-  closeMove(); renderDay(); refreshVisible();
+  closeMove(); prerisiSeznam(false); refreshVisible();
 }
 
 moveModal.addEventListener("click", ev => {
@@ -1417,7 +1477,7 @@ moveModal.addEventListener("click", ev => {
     const host = document.getElementById("moveCalHost");
     host.innerHTML = "";
     host.appendChild(KoledarIzbirnik({
-      min: iso(addDays(parseISO(state.openDay), 1)),   // nazaj se ne da
+      min: iso(addDays(parseISO(danZapiska(naloga)), 1)),   // nazaj se ne da
       izbrano: naloga.defer || null,
       danes: todayISO(),
       izbira: d => zacniPremik(d)
@@ -1561,46 +1621,37 @@ function openAll(){
   if(!inRange.length){
     html += '<div class="empty">V tem obdobju ni nalog.</div>';
   }
+  /* Ista vrstica kot v dnevnem listu – zato se zapisek tu ureja
+     na popolnoma enak način. Imena za prehod pogleda tu ni, ker
+     dnevni list ostane v strani in bi se imena podvojila. */
   if(open.length){
     html += '<div class="group-title">Odprte</div><div class="notes">';
-    for(const t of open) html += allRow(t, tISO);
+    for(const t of open) html += vrsticaZapiska(t, false);
     html += '</div>';
   }
   if(done.length){
     html += '<div class="group-title">Opravljene</div><div class="notes">';
-    for(const t of done) html += allRow(t, tISO);
+    for(const t of done) html += vrsticaZapiska(t, false);
     html += '</div>';
   }
   allBody.innerHTML = html;
   allSheet.classList.add("open");
+  aktivniSeznam = "vse";
 }
-function allRow(t, tISO){
-  const waiting = !t.done && t.defer && t.defer > tISO;
-  return '<div class="note'+(t.done?" done":"")+'" data-id="'+t.id+'" data-goto="'+placementOf(t,tISO)+'">'+
-    '<button class="chk" data-act="toggle2">✓</button>'+
-    '<div class="note-main">'+
-      '<span class="note-date">'+kratekDatum(t.created)+'</span>'+
-      (waiting ? '<span class="note-wait">čaka do '+kratekDatum(t.defer)+'</span>' : '')+
-      '<div class="note-text">'+escapeHTML(t.text || "(prazen zapisek)")+'</div>'+
-    '</div></div>';
-}
-allBody.addEventListener("click", ev => {
-  const note = ev.target.closest(".note"); if(!note) return;
-  const t = state.tasks.find(x => x.id === note.dataset.id); if(!t) return;
-  if(ev.target.closest('[data-act="toggle2"]')){
-    t.done = !t.done;
-    t.doneDate = t.done ? todayISO() : null;
-    persist(); refreshIndex(); refreshVisible(); openAll();
-  } else {
-    allSheet.classList.remove("open");
-    openDay(note.dataset.goto);
-  }
-});
+
+allBody.addEventListener("click", klikVZapisku);
+allBody.addEventListener("focusout", konecPisanja);
+allBody.addEventListener("input", pisanjeVZapisku);
+allBody.addEventListener("keydown", enterVZapisku);
+allBody.addEventListener("keydown", vracalkaVZapisku);
+allBody.addEventListener("beforeinput", vracalkaPredVnosom);
+
 document.getElementById("allBack").addEventListener("click", () => {
   allSheet.classList.remove("open");
+  aktivniSeznam = "dan";
   refreshIndex(); refreshVisible();
 });
-document.getElementById("btnAll").addEventListener("click", openAll);
+document.getElementById("btnAll").addEventListener("click", () => openAll());
 
 /* ============================================================
    8. KLIKI V SEZNAMU + PREKLOP POGLEDA
@@ -1638,7 +1689,10 @@ function refreshVisible(){
    zažene odštevanje, zato se nikoli ne pojavita dva hkrati.
    Stoji 1,5 sekunde. Na dotik se ne odziva.
    ============================================================ */
-const OBVESTILO_MS = 1500;                 // koliko časa stoji
+/* Trak stoji cele 2,5 sekunde. Nič ga ne skrajša – ne dotik, ne
+   zapiranje okenc, ne menjava pogleda. Edina izjema je nov premik:
+   takrat trak dobi novo besedilo in odštevanje se začne znova. */
+const OBVESTILO_MS = 2500;
 const obvestiloEl = document.getElementById("obvestilo");
 let obvestiloUra = null;
 
@@ -1673,11 +1727,15 @@ if(vidno){
 }
 
 /* Nov zapisek pripeljemo v vidno polje.
-   Prvič takoj, drugič ko se tipkovnica dejansko odpre – takrat se
+   "end" ga postavi na SPODNJI rob vidnega dela, torej tik nad tipkovnico.
+   Prej je bil na sredini, zato so se pod njim videli odkljukani zapiski,
+   ki na tem mestu samo motijo (popravek 21. 8. 2026).
+   Prvič zdrsnemo takoj, drugič ko se tipkovnica dejansko odpre – takrat se
    vidni del zaslona spremeni in prvi izračun ne velja več.
    Varovalka počisti čakanje, če se tipkovnica sploh ne odpre. */
 function pripeljiVVidno(el){
-  const zdrsni = () => el.scrollIntoView({ block:"center", behavior:"smooth" });
+  const vrstica = el.closest(".note") || el;   // cela vrstica, ne samo besedilo
+  const zdrsni = () => vrstica.scrollIntoView({ block:"end", behavior:"smooth" });
   zdrsni();
   if(!vidno) return;
   const obTipkovnici = () => { uskladiZVidnim(); zdrsni(); };
