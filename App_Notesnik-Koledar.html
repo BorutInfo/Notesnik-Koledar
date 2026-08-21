@@ -233,9 +233,11 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .note{display:flex;align-items:flex-start;gap:10px;padding:12px 12px;border-bottom:1px solid var(--line);
   scroll-margin-bottom:0}
 .note:last-child{border-bottom:0}
+/* Krogec stoji desno od datuma (premaknjen 21. 8. 2026). */
 .chk{
-  flex:0 0 auto;width:22px;height:22px;margin-top:1px;border-radius:50%;
-  border:2px solid var(--line);display:flex;align-items:center;justify-content:center;
+  flex:0 0 auto;width:22px;height:22px;border-radius:50%;
+  margin:0 0 4px 8px;vertical-align:middle;
+  border:2px solid var(--line);display:inline-flex;align-items:center;justify-content:center;
   font-size:13px;color:transparent;transition:background .15s,border-color .15s;
 }
 .note.done .chk{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -487,11 +489,12 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 
   <footer id="bottombar">
     <div class="seg" id="seg">
-      <button data-view="teden" class="on">Teden</button>
-      <button data-view="mesec">Mesec</button>
-      <button data-view="leto">Leto</button>
+      <!-- skrita oznaka data-view se NE sme spreminjati: po njej aplikacija ve, kateri pogled naj pokaže -->
+      <button data-view="teden" class="on">Ted</button>
+      <button data-view="mesec">Mes</button>
+      <button data-view="leto">Let</button>
     </div>
-    <button id="btnAll">Vse naloge</button>
+    <button id="btnAll">Vse</button>
   </footer>
 </div>
 
@@ -655,9 +658,6 @@ function uid(){ return Date.now().toString(36) + Math.random().toString(36).slic
    3. DATUMI
    ============================================================ */
 const DAN_KRATKO = ["ned","pon","tor","sre","čet","pet","sob"];
-const DAN_POLNO  = ["nedelja","ponedeljek","torek","sreda","četrtek","petek","sobota"];
-const MES_POLNO  = ["januar","februar","marec","april","maj","junij",
-                    "julij","avgust","september","oktober","november","december"];
 const MES_KRATKO = ["jan","feb","mar","apr","maj","jun","jul","avg","sep","okt","nov","dec"];
 
 const pad = n => String(n).padStart(2,"0");
@@ -687,7 +687,8 @@ function sklon(n, oblike){
 }
 const odprteBeseda = n => n+" "+sklon(n, ["odprta naloga","odprti nalogi","odprte naloge","odprtih nalog"]);
 const opravljeneBeseda = n => n+" "+sklon(n, ["opravljena","opravljeni","opravljene","opravljenih"]);
-function kratekDatum(isoStr){ const d = parseISO(isoStr); return d.getDate()+". "+MES_KRATKO[d.getMonth()]+"."; }
+/* Ime meseca je povsod kratica brez pike: 19. avg (dogovor 21. 8. 2026). */
+function kratekDatum(isoStr){ const d = parseISO(isoStr); return d.getDate()+". "+MES_KRATKO[d.getMonth()]; }
 
 /* ============================================================
    4. RAZPOREJANJE NALOG PO DNEH
@@ -800,9 +801,10 @@ function renderWeek(i){
   const h = document.createElement("div");
   h.className = "week-head";
   const rng = start.getMonth()===end.getMonth()
-    ? start.getDate()+".–"+end.getDate()+". "+MES_POLNO[end.getMonth()]
-    : start.getDate()+". "+MES_KRATKO[start.getMonth()]+". – "+end.getDate()+". "+MES_KRATKO[end.getMonth()]+".";
-  h.innerHTML = '<span>'+weekNumber(start)+'. teden</span><span class="range">'+rng+'</span>';
+    ? start.getDate()+".–"+end.getDate()+". "+MES_KRATKO[end.getMonth()]
+    : start.getDate()+". "+MES_KRATKO[start.getMonth()]+" – "+end.getDate()+". "+MES_KRATKO[end.getMonth()];
+  // Številka tedna je odstranjena 21. 8. 2026; ostane samo razpon datumov.
+  h.innerHTML = '<span class="range">'+rng+'</span>';
   wrap.appendChild(h);
 
   const list = document.createElement("div");
@@ -844,7 +846,7 @@ function renderMonth(i){
 
   const h = document.createElement("div");
   h.className = "month-head";
-  h.textContent = MES_POLNO[m].charAt(0).toUpperCase()+MES_POLNO[m].slice(1)+" "+y;
+  h.textContent = MES_KRATKO[m]+" "+y;
   wrap.appendChild(h);
 
   const dow = document.createElement("div");
@@ -955,9 +957,9 @@ function updateCtx(){
   const s = unitStartDate(state.view, i), e = unitEndDate(state.view, i);
   if(state.view==="teden"){
     ctxTitle.innerHTML = weekNumber(s)+". teden <span class=\"sub\">"+
-      MES_POLNO[s.getMonth()]+" "+s.getFullYear()+"</span>";
+      MES_KRATKO[s.getMonth()]+" "+s.getFullYear()+"</span>";
   } else if(state.view==="mesec"){
-    ctxTitle.innerHTML = MES_POLNO[s.getMonth()].charAt(0).toUpperCase()+MES_POLNO[s.getMonth()].slice(1)+
+    ctxTitle.innerHTML = MES_KRATKO[s.getMonth()]+
       " <span class=\"sub\">"+s.getFullYear()+"</span>";
   } else {
     ctxTitle.innerHTML = "Leto <span class=\"sub\">"+s.getFullYear()+"</span>";
@@ -994,7 +996,7 @@ function openDay(key){
   state.openDay = key;
   aktivniSeznam = "dan";
   const d = parseISO(key);
-  dayTitle.textContent = d.getDate()+". "+MES_POLNO[d.getMonth()]+" "+d.getFullYear();
+  dayTitle.textContent = d.getDate()+". "+MES_KRATKO[d.getMonth()]+" "+d.getFullYear();
   renderDay();
   daySheet.classList.add("open");
 }
@@ -1020,9 +1022,9 @@ function vrsticaZapiska(t, zPrehodom){
   const waiting = !t.done && t.defer && t.defer > tISO;     // čaka na svoj datum
   return '<div class="note'+(t.done?" done":"")+(carried?" carried":"")+'" data-id="'+t.id+'"'+
     (zPrehodom ? ' style="view-transition-name:z-'+t.id+'"' : '')+'>'+
-    '<button class="chk" data-act="toggle">✓</button>'+
     '<div class="note-main">'+
       '<span class="note-date" data-act="odpriDan">'+kratekDatum(t.created)+'</span>'+
+      '<button class="chk" data-act="toggle">✓</button>'+
       (waiting ? '<span class="note-wait" data-act="odpriDan">premaknjeno &middot; '+kratekDatum(t.defer)+'</span>' : '')+
       '<div class="note-line">'+
         uraGumb(t, dan)+
@@ -1044,10 +1046,8 @@ function renderDay(focusId){
   const e = INDEX.get(key);
   const tasks = e ? e.tasks : [];
 
-  let html = '<div class="day-hero">'+
-    '<div class="big">'+d.getDate()+". "+MES_POLNO[d.getMonth()]+'</div>'+
-    '<div class="small">'+DAN_POLNO[d.getDay()]+", "+d.getFullYear()+
-      (key===tISO ? " · danes" : "")+'</div></div>';
+  // Vrstica pod glavo je odstranjena 21. 8. 2026; datum je v glavi lista.
+  let html = "";
 
   if(tasks.length){
     html += '<div class="notes">';
@@ -1527,8 +1527,7 @@ moveModal.addEventListener("click", ev => {
    ============================================================ */
 function KoledarIzbirnik(nastavitve){
   const o = nastavitve || {};
-  const MES = ["januar","februar","marec","april","maj","junij",
-               "julij","avgust","september","oktober","november","december"];
+  const MES = MES_KRATKO;
   const DNI = ["pon","tor","sre","čet","pet","sob","ned"];
   const p2  = n => String(n).padStart(2,"0");
 
@@ -1565,7 +1564,7 @@ function KoledarIzbirnik(nastavitve){
     el.innerHTML =
       '<div class="cal-head">'+
         '<button class="cal-nav" data-skok="-1" '+nazajNi+'>‹</button>'+
-        '<div class="cal-title">'+MES[mesec].charAt(0).toUpperCase()+MES[mesec].slice(1)+' '+leto+'</div>'+
+        '<div class="cal-title">'+MES[mesec]+' '+leto+'</div>'+
         '<button class="cal-nav" data-skok="1" '+naprejNi+'>›</button>'+
       '</div>'+
       '<div class="cal-dow">'+DNI.map(s=>"<span>"+s+"</span>").join("")+'</div>'+
