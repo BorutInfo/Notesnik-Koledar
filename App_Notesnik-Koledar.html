@@ -277,6 +277,10 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .note.done .ura-btn{background:transparent;color:var(--dim);text-decoration:line-through}
 .note.done .ura-btn.prazna{display:none}   /* odkljukani nalogi se ure ne da dodati */
 
+/* Med pisanjem novega zapiska so odkljukani skriti.
+   Vrnejo se takoj, ko pisanje končate. */
+.sheet-body.pisemo .note.done{display:none}
+
 /* opozorilna vrstica v okencu */
 .opozorilo{
   margin:0 0 8px;padding:11px 14px;border-radius:11px;
@@ -739,11 +743,6 @@ function buildIndex(){
        2. neopravljene brez ure – po datumu nastanka
        3. opravljene            – čisto na dnu */
     e.tasks.sort((a,b)=>{
-      /* Zapisek, ki ga prav zdaj pišemo, stoji čisto na dnu. Tako pod
-         njim ni ničesar in ga tipkovnica ne more prekriti. Ko pisanje
-         končate, se ob naslednjem risanju postavi na svoje mesto. */
-      if(a.id === state.pisemo) return 1;
-      if(b.id === state.pisemo) return -1;
       if(a.done !== b.done) return a.done ? 1 : -1;
       const au = !!a.ura, bu = !!b.ura;
       if(au !== bu) return au ? -1 : 1;
@@ -1002,7 +1001,7 @@ function openDay(key){
 function closeDay(){
   daySheet.classList.remove("open");
   state.openDay = null;
-  state.pisemo = null;
+  konecPisanja();
   aktivniSeznam = "dan";
   refreshIndex();
   refreshVisible();
@@ -1160,16 +1159,24 @@ function enterVZapisku(ev){
 dayBody.addEventListener("click", ev => {
   if(ev.target.closest("#addNote")){
     const t = { id:uid(), text:"", created:state.openDay, done:false, doneDate:null, defer:null };
-    state.tasks.push(t); state.pisemo = t.id;
+    state.tasks.push(t); zacniPisanje(t.id);
     persist(); refreshIndex(); renderDay(t.id);
     return;
   }
   klikVZapisku(ev);
 });
-/* Konec pisanja. Brez prerisovanja, da zapisek ne poskoči pred očmi –
-   na svoje mesto se postavi ob naslednjem risanju seznama. */
+/* Med pisanjem novega zapiska odkljukane skrijemo. Brez tega ostanejo
+   pod njim in motijo, seznam pa se ne more zdrsniti dovolj daleč.
+   Ko pisanje končate, se spet pokažejo – brez prerisovanja, zato nič
+   ne poskoči. */
+function zacniPisanje(id){
+  state.pisemo = id;
+  dayBody.classList.add("pisemo");
+}
 function konecPisanja(ev){
-  if(ev.target.closest(".note-text")) state.pisemo = null;
+  if(ev && !ev.target.closest(".note-text")) return;
+  state.pisemo = null;
+  dayBody.classList.remove("pisemo");
 }
 dayBody.addEventListener("focusout", konecPisanja);
 dayBody.addEventListener("input", pisanjeVZapisku);
@@ -1640,7 +1647,6 @@ function openAll(){
 }
 
 allBody.addEventListener("click", klikVZapisku);
-allBody.addEventListener("focusout", konecPisanja);
 allBody.addEventListener("input", pisanjeVZapisku);
 allBody.addEventListener("keydown", enterVZapisku);
 allBody.addEventListener("keydown", vracalkaVZapisku);
