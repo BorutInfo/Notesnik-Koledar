@@ -290,11 +290,16 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 }
 .opozorilo.mirno{background:var(--bg);color:var(--dim);font-weight:500}
 
-/* oznaka za odloženo nalogo */
+/* Odložen zapisek: namesto napisa stoji ikona – ukrivljena puščica v desno,
+   takoj desno ob krogcu za odkljukanje. Barva in ozadje sta enaka kot pri
+   datumu in uri, da se vsi trije znaki berejo kot ena družina. */
 .note-wait{
-  display:inline-block;font-size:11px;font-weight:700;letter-spacing:.03em;
-  color:#8a6d1f;background:#fdf0cf;padding:2px 7px;border-radius:5px;margin:0 0 4px 5px;
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--accent);background:var(--accent-soft);
+  padding:5px 7px;border-radius:5px;margin:0 0 4px 8px;vertical-align:middle;
 }
+.note-wait svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round;display:block}
 
 /* ============================================================
    6b. OKENCE ZA PREMIK NALOGE
@@ -325,23 +330,44 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .opt.cancel{background:transparent;justify-content:center;color:var(--dim);font-weight:550;margin-top:4px}
 .opt .chev{color:var(--dim);font-weight:400}
 
-/* --- dva tedna, sedem dni v vrsti: en sam element, štirinajst polj --- */
+/* --- koledar dveh tednov: ponedeljek levo, tri vrstice, petnajst dni --- */
 .oznaka{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
   color:var(--dim);padding:2px 4px 7px}
+.oznaka.sredina{text-align:center}
+.lead.sredina{text-align:center}
+
+/* glava okna za premik: ikona na sredini */
+.premik-glava{display:flex;align-items:center;justify-content:center;padding:2px 4px 10px}
+.premik-ikona{display:flex;align-items:center;justify-content:center;
+  width:44px;height:44px;color:var(--text)}
+.premik-ikona svg{width:30px;height:30px;stroke:currentColor;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* gumb z ikono na levi in nacentriranim napisom */
+.opt.sredinsko{justify-content:center;gap:9px}
+.ikona-levo{display:flex;align-items:center;justify-content:center;flex:0 0 auto;color:var(--dim)}
+.ikona-levo svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round;display:block}
+
+.dow-premik{display:grid;grid-template-columns:repeat(7,1fr);padding:0 5px 3px}
+.dow-premik span{text-align:center;font-size:11px;font-weight:700;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.04em}
 .dayline{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;
   background:var(--bg);border-radius:12px;padding:5px;margin-bottom:10px}
 .dayline button{
-  min-width:0;display:flex;flex-direction:column;align-items:center;gap:3px;
-  padding:10px 1px;border-radius:9px;font-size:15px;font-weight:650;line-height:1;
+  min-width:0;display:flex;align-items:center;justify-content:center;
+  padding:11px 1px;border-radius:9px;font-size:15px;font-weight:650;line-height:1;
 }
-.dayline .dw{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--dim)}
 .dayline button:active{background:var(--accent-soft)}
-.dayline button.cur{                       /* dan, na katerem smo – ni izbirljiv */
-  background:var(--surface);color:var(--dim);pointer-events:none;
-  box-shadow:inset 0 0 0 1.5px var(--line);
+.dayline .prazno{visibility:hidden;pointer-events:none}
+.dayline button.mimo{                      /* pretekli dnevi – vanje ni mogoče pisati */
+  color:var(--line);pointer-events:none;
 }
-.dayline button.cur .dw{color:var(--accent)}
-.dayline button.wknd .dw{color:var(--danger);opacity:.75}
+.dayline button.cur{                       /* dan, na katerem smo – ni izbirljiv */
+  background:var(--surface);color:var(--accent);pointer-events:none;
+  box-shadow:inset 0 0 0 1.5px var(--accent);
+}
+.dayline button.wknd{color:var(--danger);opacity:.85}
 
 /* --- "Drug datum": sistemski izbirnik čez celo vrstico ---
    Polje za datum je raztegnjeno čez ves gumb in prosojno, zato se
@@ -514,37 +540,34 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
     <div class="grip"></div>
     <!-- korak 1: izbira dneva -->
     <div id="moveStep1">
-      <h3>Premakni nalogo</h3>
-      <p class="lead" id="moveLead"></p>
-
-      <div class="oznaka">Naslednja dva tedna</div>
+      <div class="premik-glava">
+        <span class="premik-ikona" aria-label="Premakni"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a7 7 0 0 1 7-7h7"/><path d="M15 4l5 4-5 4"/></svg></span>
+      </div>
+      <div class="dow-premik"><span>pon</span><span>tor</span><span>sre</span><span>čet</span><span>pet</span><span>sob</span><span>ned</span></div>
       <div class="dayline" id="moveDays"></div>
 
-      <button class="opt" id="odpriKoledar">
-        <span>Drug datum</span><span class="chev">koledar ›</span>
+      <button class="opt sredinsko" id="odpriKoledar">
+        <span class="ikona-levo"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span><span>Drug datum</span>
       </button>
 
-      <button class="opt reset" id="btnReset" hidden>↺ Nazaj na prvotni/današnji dan</button>
+      <button class="opt reset sredinsko" id="btnReset" hidden>↺ Prvotni/Današnji dan</button>
       <button class="opt cancel" data-close="1">Prekliči</button>
     </div>
 
     <!-- korak 3: koledar (lastna komponenta, ne sistemska) -->
     <div id="moveStep3" hidden>
-      <h3>Izberi datum</h3>
-      <p class="lead" id="moveLead3"></p>
       <div id="moveCalHost"></div>
       <button class="opt cancel cal-nazaj" id="moveCalNazaj">‹ Nazaj</button>
     </div>
 
     <!-- korak 2: kaj z uro, preden se premik izvede -->
     <div id="moveStep2" hidden>
-      <h3>Naloga ima uro</h3>
-      <p class="lead" id="moveLead2"></p>
-      <div class="oznaka">Uro</div>
-      <button class="opt" id="uroIzbrisem">Izbrišem</button>
-      <button class="opt" id="uroObdrzim">Obdržim</button>
-      <button class="opt" id="uroSpremeniOdpri">
-        <span>Spremenim</span><span class="chev">kolesje ›</span>
+      <p class="lead sredina" id="moveLead2"></p>
+      <div class="oznaka sredina" id="uroOznaka">Uro</div>
+      <button class="opt sredinsko" id="uroIzbrisem">Izbrišem</button>
+      <button class="opt sredinsko" id="uroObdrzim">Obdržim</button>
+      <button class="opt sredinsko" id="uroSpremeniOdpri">
+        <span class="ikona-levo"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span>Spremenim</span>
       </button>
       <button class="opt cancel" data-close="1">Prekliči</button>
     </div>
@@ -559,8 +582,6 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 
     <!-- korak 1: kolesje -->
     <div id="uraStep1">
-      <h3>Ura zapiska</h3>
-      <p class="lead" id="uraLead"></p>
       <p class="opozorilo" id="uraOpozorilo" hidden></p>
 
       <div class="kolo" id="kolo">
@@ -571,7 +592,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
       </div>
 
       <button class="opt potrdi" id="uraPotrdi">Potrdi</button>
-      <button class="opt reset" id="uraOdstrani" hidden>Odstrani uro</button>
+      <button class="opt reset sredinsko" id="uraOdstrani" hidden>Odstrani uro</button>
       <button class="opt cancel" data-close="1">Prekliči</button>
     </div>
 
@@ -1025,7 +1046,7 @@ function vrsticaZapiska(t, zPrehodom){
     '<div class="note-main">'+
       '<span class="note-date" data-act="odpriDan">'+kratekDatum(t.created)+'</span>'+
       '<button class="chk" data-act="toggle">✓</button>'+
-      (waiting ? '<span class="note-wait" data-act="odpriDan">premaknjeno &middot; '+kratekDatum(t.defer)+'</span>' : '')+
+      (waiting ? '<span class="note-wait" data-act="odpriDan" title="Premaknjeno"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a7 7 0 0 1 7-7h7"/><path d="M15 4l5 4-5 4"/></svg></span>' : '')+
       '<div class="note-line">'+
         uraGumb(t, dan)+
         '<div class="note-text" contenteditable="true" data-act="edit">'+escapeHTML(t.text)+'</div>'+
@@ -1292,7 +1313,6 @@ function openUra(id){
   uraId = id;
   const t = state.tasks.find(x => x.id === id); if(!t) return;
   const naslov = t.text ? "»"+t.text+"«" : "(prazen zapisek)";
-  document.getElementById("uraLead").textContent  = naslov;
   document.getElementById("uraLead2").textContent = naslov;
   document.getElementById("uraOpozorilo").hidden  = true;
   document.getElementById("uraOdstrani").hidden   = !t.ura;
@@ -1386,7 +1406,6 @@ uraModal.addEventListener("click", ev => {
    ============================================================ */
 const moveModal = document.getElementById("moveModal");
 const moveDays  = document.getElementById("moveDays");
-const moveLead  = document.getElementById("moveLead");
 const btnReset  = document.getElementById("btnReset");
 const moveStep1 = document.getElementById("moveStep1");
 const moveStep2 = document.getElementById("moveStep2");
@@ -1400,16 +1419,37 @@ let ciljniDan = null;     // izbrani dan, ki čaka na odločitev o uri
    Stolpci se NE poravnavajo po dnevih v tednu – prvi stolpec je
    vedno tekoči dan, ker tako lažje šteješ "čez toliko dni". */
 function risiVrsticoDni(baza){
+  /* Običajen koledar: ponedeljek levo, tri vrstice po sedem polj.
+     Dni je petnajst – dva polna tedna in ponovitev dneva, s katerim se
+     začne izhodiščni dan. Zato je ta dan v tednu trikrat, vsi ostali
+     po dvakrat. Dnevi pred izhodiščnim so posvetljeni, ker vanje ni
+     mogoče pisati; polja za zadnjim dnem ostanejo prazna. */
+  const prviVMrezi = mondayOf(baza);              // ponedeljek tekočega tedna
+  const zadnjiDan  = addDays(baza, 14);           // petnajsti dan, isti dan v tednu
+  const bazaISO = iso(baza), zadnjiISO = iso(zadnjiDan);
+
   let html = "";
-  for(let k=0;k<14;k++){
-    const d = addDays(baza, k), wknd = (d.getDay()===0 || d.getDay()===6);
-    const razred = k===0 ? "cur" : (wknd ? "wknd" : "");
-    html += '<button class="'+razred+'" data-date="'+(k===0 ? "" : iso(d))+'">'+
-              '<span class="dw">'+DAN_KRATKO[d.getDay()]+'</span>'+
-              '<span>'+d.getDate()+'</span>'+
+  for(let k=0;k<21;k++){
+    const d = addDays(prviVMrezi, k), dISO = iso(d);
+    if(dISO > zadnjiISO){ html += '<span class="prazno"></span>'; continue; }
+    const wknd = (d.getDay()===0 || d.getDay()===6);
+    let razred = "";
+    if(dISO === bazaISO)      razred = "cur";     // dan, na katerem smo – ni izbirljiv
+    else if(dISO < bazaISO)   razred = "mimo";    // pretekli dnevi – posvetljeni
+    else if(wknd)             razred = "wknd";
+    const izbirljiv = (dISO > bazaISO);
+    html += '<button class="'+razred+'" data-date="'+(izbirljiv ? dISO : "")+'">'+
+              d.getDate()+
             '</button>';
   }
   moveDays.innerHTML = html;
+}
+
+/* Meni, ko ima zapisek uro: zgoraj samo "premik na (datum)",
+   ura pa stoji pri besedi URO. */
+function nastaviMeniZaUro(t, dateISO){
+  document.getElementById("moveLead2").textContent = "premik na "+kratekDatum(dateISO);
+  document.getElementById("uroOznaka").textContent = "Uro "+t.ura.replace(":",".");
 }
 
 function moveKorak(n){
@@ -1421,8 +1461,6 @@ function moveKorak(n){
 function openMove(id){
   const t = state.tasks.find(x => x.id === id); if(!t) return;
   moveId = id;
-  moveLead.textContent = t.text ? "»"+t.text+"«" : "(prazen zapisek)";
-
   risiVrsticoDni(parseISO(danZapiska(t)));
   btnReset.hidden = !t.defer;
   moveKorak(1);
@@ -1442,11 +1480,9 @@ function nazajVMeniZaUro(id, dan){
   const t = state.tasks.find(x => x.id === id);
   if(!t || !t.ura){ return; }
   moveId = id; ciljniDan = dan;
-  moveLead.textContent = t.text ? "»"+t.text+"«" : "(prazen zapisek)";
   risiVrsticoDni(parseISO(danZapiska(t)));
   btnReset.hidden = !t.defer;
-  document.getElementById("moveLead2").textContent =
-    t.ura.replace(":",".")+" · premik na "+kratekDatum(dan);
+  nastaviMeniZaUro(t, dan);
   moveKorak(2);
   moveModal.classList.add("open");
 }
@@ -1457,8 +1493,7 @@ function zacniPremik(dateISO){
   const t = state.tasks.find(x => x.id === moveId); if(!t) return;
   if(!t.ura || !dateISO){ applyMove(dateISO); return; }
   ciljniDan = dateISO;
-  document.getElementById("moveLead2").textContent =
-    t.ura.replace(":",".")+" · premik na "+kratekDatum(dateISO);
+  nastaviMeniZaUro(t, dateISO);
   moveKorak(2);
 }
 
@@ -1479,8 +1514,6 @@ moveModal.addEventListener("click", ev => {
   if(ev.target.closest("#moveCalNazaj")){ moveKorak(1); return; }
   if(ev.target.closest("#odpriKoledar")){
     const naloga = state.tasks.find(x => x.id === moveId); if(!naloga) return;
-    document.getElementById("moveLead3").textContent =
-      naloga.text ? "»"+naloga.text+"«" : "(prazen zapisek)";
     const host = document.getElementById("moveCalHost");
     host.innerHTML = "";
     host.appendChild(KoledarIzbirnik({
