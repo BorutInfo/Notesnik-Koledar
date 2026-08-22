@@ -6,65 +6,100 @@
 <title>Najtanjša črta – preizkus</title>
 <style>
   :root{ color-scheme: light; }
-  body{ margin:0; padding:20px 18px 60px; background:#fff; color:#1c1b19;
-        font:17px/1.45 -apple-system, system-ui, sans-serif; }
-  h1{ font-size:20px; margin:0 0 4px }
+  body{ margin:0; padding:18px 16px 60px; background:#fff; color:#1c1b19;
+        font:16px/1.4 -apple-system, system-ui, sans-serif; }
+  h1{ font-size:19px; margin:0 0 4px }
+  h2{ font-size:15px; margin:26px 0 10px; color:#4f46e5;
+      border-top:1px solid #e4e3df; padding-top:14px }
   .podatek{ background:#eceafe; color:#4f46e5; font-weight:700;
-            padding:10px 12px; border-radius:10px; margin:10px 0 22px }
-  .v{ margin:0 0 20px }
-  .oznaka{ font-size:15px; color:#8a8781; margin:0 0 6px }
-  .oznaka b{ color:#1c1b19 }
-  .polje{ position:relative; height:14px }
-  .polje i{ position:absolute; left:0; top:6px; width:100%; display:block; background:#000 }
-  hr{ border:none; border-top:1px solid #e4e3df; margin:26px 0 }
-  .krogci{ display:flex; gap:16px; align-items:center; flex-wrap:wrap }
-  .krogci span{ text-align:center; font-size:13px; color:#8a8781 }
-  .k{ width:26px; height:26px; border-radius:50%; border:1px solid #000;
-      box-sizing:border-box; margin:0 auto 4px }
+            padding:10px 12px; border-radius:10px; margin:8px 0 4px; font-size:15px }
+  .navodilo{ color:#8a8781; font-size:14px; margin:0 0 4px }
+
+  /* --- posamezne črte --- */
+  .v{ margin:0 0 16px }
+  .oznaka{ font-size:14px; color:#8a8781; margin:0 0 5px }
+  .oznaka b{ color:#1c1b19; font-size:15px }
+  .polje{ position:relative; height:12px }
+  .polje i{ position:absolute; left:0; top:5px; width:100%; display:block; background:#000 }
+
+  /* --- glavnik: ista črta 30-krat, korak 4 px ---
+     Debelina ene črte se sešteje v sivino celega bloka.
+     Razlika, ki je pri eni črti ne vidite, je tu očitna. */
+  /* flex-shrink:0 je nujen – brez njega se polja stisnejo in krogci
+     se sploščijo v ozke elipse. Napaka, odkrita 22. 8. 2026. */
+  .glavnik{ display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap }
+  .g{ width:96px; flex:0 0 auto }
+  .g .blok{ position:relative; height:120px; border:1px solid #e4e3df; overflow:hidden }
+  .g .blok i{ position:absolute; left:0; width:100%; display:block; background:#000 }
+  .g .ime{ font-size:12px; color:#8a8781; text-align:center; margin-top:5px; line-height:1.25 }
+  .g .ime b{ display:block; color:#1c1b19; font-size:13px }
 </style>
 </head>
 <body>
 
 <h1>Najtanjša črta</h1>
 <p class="podatek" id="podatek">…</p>
+<p class="navodilo">Posnetek zaslona te strani mi pove točno debelino v pikah zaslona.</p>
 
-<div class="v"><p class="oznaka"><b>višina 1px</b> – običajna črta</p>
+<h2>1 · Posamezne črte</h2>
+
+<div class="v"><p class="oznaka"><b>višina 1px</b> — običajna črta</p>
   <div class="polje"><i style="height:1px"></i></div></div>
-
 <div class="v"><p class="oznaka"><b>višina 0.5px</b></p>
   <div class="polje"><i style="height:0.5px"></i></div></div>
-
 <div class="v"><p class="oznaka"><b>višina 0.33px</b></p>
   <div class="polje"><i style="height:0.3334px"></i></div></div>
-
-<hr>
-
-<div class="v"><p class="oznaka"><b>scaleY(0.5)</b> – polovica</p>
+<div class="v"><p class="oznaka"><b>scaleY(0.5)</b> — polovica</p>
   <div class="polje"><i style="height:1px;transform:scaleY(.5);transform-origin:0 0"></i></div></div>
-
-<div class="v"><p class="oznaka"><b>scaleY(0.34)</b> – tretjina</p>
+<div class="v"><p class="oznaka"><b>scaleY(0.34)</b> — tretjina</p>
   <div class="polje"><i style="height:1px;transform:scaleY(.3334);transform-origin:0 0"></i></div></div>
-
-<div class="v"><p class="oznaka"><b>scaleY(0.25)</b> – četrtina</p>
+<div class="v"><p class="oznaka"><b>scaleY(0.25)</b> — četrtina</p>
   <div class="polje"><i style="height:1px;transform:scaleY(.25);transform-origin:0 0"></i></div></div>
 
-<hr>
+<h2>2 · Glavniki — tu je razlika očitna</h2>
+<p class="navodilo">Ista črta trideset‑krat, vedno na 4 px. Debelejša ko je črta,
+temnejši je blok. Če sta dva bloka enako siva, sta črti enaki.</p>
 
-<p class="oznaka">Obroba krogca – kar potrebuje sklop 6 (stopnja nujnosti)</p>
-<div class="krogci">
-  <span><i class="k" style="border-width:.5px"></i>0.5px</span>
-  <span><i class="k" style="border-width:1px"></i>1px</span>
-  <span><i class="k" style="border-width:1.5px"></i>1.5px</span>
-  <span><i class="k" style="border-width:2px"></i>2px</span>
-  <span><i class="k" style="border-width:2.5px"></i>2.5px</span>
-  <span><i class="k" style="border-width:3px"></i>3px</span>
-</div>
+<div class="glavnik" id="glavnik"></div>
+
+<h2>3 · Obroba krogca — kar potrebuje sklop 6</h2>
+<p class="navodilo">Če sta 0.5 px in 1 px videti enaka, polkorak ne bo delal.</p>
+<div class="glavnik" id="krogci"></div>
 
 <script>
   var d = window.devicePixelRatio || 1;
   document.getElementById("podatek").textContent =
-    "Vaš zaslon: " + d + "×   ·   1 pika zaslona = " + (1/d).toFixed(2) + " CSS px" +
-    "   ·   " + screen.width + "×" + screen.height;
+    "Zaslon " + d + "×   ·   1 pika zaslona = " + (1/d).toFixed(2) + " CSS px";
+
+  /* glavniki */
+  var V = [
+    ["1px",        "height:1px"],
+    ["0.5px",      "height:0.5px"],
+    ["0.33px",     "height:0.3334px"],
+    ["scaleY .5",  "height:1px;transform:scaleY(.5);transform-origin:0 0"],
+    ["scaleY .34", "height:1px;transform:scaleY(.3334);transform-origin:0 0"],
+    ["scaleY .25", "height:1px;transform:scaleY(.25);transform-origin:0 0"]
+  ];
+  var h = "";
+  for (var i = 0; i < V.length; i++) {
+    var crte = "";
+    for (var k = 0; k < 30; k++) crte += '<i style="top:' + (k*4) + 'px;' + V[i][1] + '"></i>';
+    h += '<div class="g"><div class="blok" data-g="'+i+'">' + crte + '</div>' +
+         '<div class="ime"><b>' + V[i][0] + '</b></div></div>';
+  }
+  document.getElementById("glavnik").innerHTML = h;
+
+  /* krogci */
+  var K = [0.5, 1, 1.5, 2, 2.5, 3];
+  var hk = "";
+  for (var j = 0; j < K.length; j++) {
+    hk += '<div class="g" style="width:64px"><div class="blok" style="height:64px;' +
+          'display:flex;align-items:center;justify-content:center;border:none">' +
+          '<span style="width:40px;height:40px;flex:0 0 40px;border-radius:50%;' +
+          'box-sizing:border-box;border:' + K[j] + 'px solid #000"></span></div>' +
+          '<div class="ime"><b>' + K[j] + 'px</b></div></div>';
+  }
+  document.getElementById("krogci").innerHTML = hk;
 </script>
 
 </body>
