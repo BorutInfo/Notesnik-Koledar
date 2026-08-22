@@ -289,6 +289,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   background:#fdecea;color:#8c2f22;font-size:14px;font-weight:600;
 }
 .opozorilo.mirno{background:var(--bg);color:var(--dim);font-weight:500}
+/* Opozorilo o pretekli uri stoji na sredini okenca. */
+#uraOpozorilo{text-align:center}
 
 /* Odložen zapisek: namesto napisa stoji ikona – ukrivljena puščica v desno,
    takoj desno ob krogcu za odkljukanje. Barva in ozadje sta enaka kot pri
@@ -444,6 +446,11 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   background:var(--accent);color:#fff;font-size:16px;font-weight:650;
 }
 .add-btn:active{opacity:.85}
+/* Pretekli dan: v tak dan zapiska ni mogoče vpisati – zapisek bi se takoj
+   prenesel na današnji dan in v tem dnevu sploh ne bi bil viden. Zato je
+   gumb posivljen in ugasnjen. Izmerjeno 22. 8. 2026. */
+.add-btn[disabled]{background:var(--line);color:var(--dim);font-weight:600}
+.add-btn[disabled]:active{opacity:1}
 
 .empty{text-align:center;color:var(--dim);font-size:15px;padding:34px 20px}
 
@@ -1040,7 +1047,10 @@ function vrsticaZapiska(t, zPrehodom){
   const tISO = todayISO();
   const dan  = danZapiska(t);
   const carried = !t.done && !t.defer && t.created < dan;   // prenesena iz prejšnjih dni
-  const waiting = !t.done && t.defer && t.defer > tISO;     // čaka na svoj datum
+  /* Puščica pove, da ste zapisek premaknili VI. Pri nočni uri ga je
+     premaknilo pravilo (gumb "Jutri"), ne vi – zato tam puščice ni.
+     Dogovorjeno 22. 8. 2026. */
+  const waiting = !t.done && t.defer && t.defer > tISO && !t.nocniPremik;
   return '<div class="note'+(t.done?" done":"")+(carried?" carried":"")+'" data-id="'+t.id+'"'+
     (zPrehodom ? ' style="view-transition-name:z-'+t.id+'"' : '')+'>'+
     '<div class="note-main">'+
@@ -1077,7 +1087,9 @@ function renderDay(focusId){
   } else {
     html += '<div class="empty">Ni zapiskov za ta dan.</div>';
   }
-  html += '<button class="add-btn" id="addNote">+ &nbsp;Nov zapisek</button>';
+  const minuloDan = key < tISO;
+  html += '<button class="add-btn" id="addNote"'+(minuloDan ? " disabled" : "")+
+          '>+ &nbsp;Nov zapisek</button>';
   dayBody.innerHTML = html;
 
   if(focusId){
@@ -1179,6 +1191,9 @@ function enterVZapisku(ev){
 
 dayBody.addEventListener("click", ev => {
   if(ev.target.closest("#addNote")){
+    /* Varovalka: v pretekli dan se ne piše. Gumb je tam ugasnjen, ta vrstica
+       pa poskrbi, da se zapisek ne ustvari niti, če klik pride po drugi poti. */
+    if(state.openDay < todayISO()) return;
     const t = { id:uid(), text:"", created:state.openDay, done:false, doneDate:null, defer:null };
     state.tasks.push(t); zacniPisanje(t.id);
     persist(); refreshIndex(); renderDay(t.id);
@@ -1241,7 +1256,8 @@ function vracalkaPredVnosom(ev){
 dayBody.addEventListener("keydown", vracalkaVZapisku);
 dayBody.addEventListener("beforeinput", vracalkaPredVnosom);
 function odstraniUro(t){
-  t.ura = null; t.uraNaslednjiDan = false; t.pripet = false;
+  /* Z uro odpade tudi razlog, zaradi katerega puščice ni bilo. */
+  t.ura = null; t.uraNaslednjiDan = false; t.pripet = false; t.nocniPremik = false;
   persist(); refreshIndex();
 }
 
@@ -1370,7 +1386,7 @@ uraModal.addEventListener("click", ev => {
     }
     if(uraJeMimo(uraDan(), ura, false)){
       const o = document.getElementById("uraOpozorilo");
-      o.textContent = "Ura je pretekla."; o.hidden = false;
+      o.textContent = "Ura je pretekla"; o.hidden = false;
       return;
     }
     zapisiUro(t, ura, false, false);
@@ -1391,6 +1407,9 @@ uraModal.addEventListener("click", ev => {
   if(ev.target.closest("#uraJutri")){
     t.defer = iso(addDays(parseISO(uraDan()), 1));
     t.pripet = false;
+    /* Zapiska niste premaknili vi – premaknilo ga je pravilo o nočni uri.
+       Zato pri njem ni puščice. Dogovorjeno 22. 8. 2026. */
+    t.nocniPremik = true;
     premikCaka = null;                 // dan je s tem že določen
     zapisiUro(t, uraIzbrana, false, false); // ura pripada naslednjemu dnevu
     closeUra(true);
@@ -1501,6 +1520,7 @@ function applyMove(dateISO){
   const t = state.tasks.find(x => x.id === moveId); if(!t) return;
   t.defer = dateISO || null;      // prazno = prekliči odlog, spet se prestavlja sam
   t.pripet = false;               // ročni premik vedno prekine pripetost
+  t.nocniPremik = false;          // odslej ste ga premaknili vi – puščica se vrne
   persist(); refreshIndex();
   /* Povemo, kam je zapisek RES pristal, ne kam ste kliknili.
      Pri gumbu "Nazaj na prvotni/današnji dan" to ni isto – dan se izračuna. */
