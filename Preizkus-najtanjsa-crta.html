@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="sl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Najtanjša črta – preizkus</title>
+<style>
+  :root{ color-scheme: light; }
+  body{ margin:0; padding:20px 18px 60px; background:#fff; color:#1c1b19;
+        font:17px/1.45 -apple-system, system-ui, sans-serif; }
+  h1{ font-size:20px; margin:0 0 4px }
+  .podatek{ background:#eceafe; color:#4f46e5; font-weight:700;
+            padding:10px 12px; border-radius:10px; margin:10px 0 22px }
+  .v{ margin:0 0 20px }
+  .oznaka{ font-size:15px; color:#8a8781; margin:0 0 6px }
+  .oznaka b{ color:#1c1b19 }
+  .polje{ position:relative; height:14px }
+  .polje i{ position:absolute; left:0; top:6px; width:100%; display:block; background:#000 }
+  hr{ border:none; border-top:1px solid #e4e3df; margin:26px 0 }
+  .krogci{ display:flex; gap:16px; align-items:center; flex-wrap:wrap }
+  .krogci span{ text-align:center; font-size:13px; color:#8a8781 }
+  .k{ width:26px; height:26px; border-radius:50%; border:1px solid #000;
+      box-sizing:border-box; margin:0 auto 4px }
+</style>
+</head>
+<body>
+
+<h1>Najtanjša črta</h1>
+<p class="podatek" id="podatek">…</p>
+
+<div class="v"><p class="oznaka"><b>višina 1px</b> – običajna črta</p>
+  <div class="polje"><i style="height:1px"></i></div></div>
+
+<div class="v"><p class="oznaka"><b>višina 0.5px</b></p>
+  <div class="polje"><i style="height:0.5px"></i></div></div>
+
+<div class="v"><p class="oznaka"><b>višina 0.33px</b></p>
+  <div class="polje"><i style="height:0.3334px"></i></div></div>
+
+<hr>
+
+<div class="v"><p class="oznaka"><b>scaleY(0.5)</b> – polovica</p>
+  <div class="polje"><i style="height:1px;transform:scaleY(.5);transform-origin:0 0"></i></div></div>
+
+<div class="v"><p class="oznaka"><b>scaleY(0.34)</b> – tretjina</p>
+  <div class="polje"><i style="height:1px;transform:scaleY(.3334);transform-origin:0 0"></i></div></div>
+
+<div class="v"><p class="oznaka"><b>scaleY(0.25)</b> – četrtina</p>
+  <div class="polje"><i style="height:1px;transform:scaleY(.25);transform-origin:0 0"></i></div></div>
+
+<hr>
+
+<p class="oznaka">Obroba krogca – kar potrebuje sklop 6 (stopnja nujnosti)</p>
+<div class="krogci">
+  <span><i class="k" style="border-width:.5px"></i>0.5px</span>
+  <span><i class="k" style="border-width:1px"></i>1px</span>
+  <span><i class="k" style="border-width:1.5px"></i>1.5px</span>
+  <span><i class="k" style="border-width:2px"></i>2px</span>
+  <span><i class="k" style="border-width:2.5px"></i>2.5px</span>
+  <span><i class="k" style="border-width:3px"></i>3px</span>
+</div>
+
+<script>
+  var d = window.devicePixelRatio || 1;
+  document.getElementById("podatek").textContent =
+    "Vaš zaslon: " + d + "×   ·   1 pika zaslona = " + (1/d).toFixed(2) + " CSS px" +
+    "   ·   " + screen.width + "×" + screen.height;
+</script>
+
+</body>
+</html>
