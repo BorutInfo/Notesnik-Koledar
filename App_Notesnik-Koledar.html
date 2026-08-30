@@ -267,7 +267,19 @@ html.tipkovnica #app{visibility:hidden}
 .sheet-back{font-size:15px;font-weight:600;color:var(--accent);padding:8px 10px;flex:0 0 auto}
 .sheet-title{flex:1;min-width:0;font-size:17px;font-weight:650;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sheet-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 24px}
+/* Seznam zapiskov v dnevu. Dve varovalki proti temu, da bi prst namesto
+   seznama premikal STRAN pod njim (od tam je prišlo tresenje):
+   1. overscroll-behavior:contain - ko pridete do konca seznama, se
+      premikanje ne prelije na stran pod njim. Isto varovalko imajo že
+      glavni seznam, kolesje za uro in koledar. Ta seznam je edini je ni
+      imel (najdeno 30. 8. 2026).
+   2. min-height:calc(100% + 1px) na vsebini - seznam ima VEDNO vsaj eno
+      piko česa za drseti. Brez tega prva varovalka ne zaleže: kadar v
+      seznamu ni česa drsati, prst gre naravnost na stran pod njim.
+      To je znana past in znana rešitev (glej tehnične opombe). */
+.sheet-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 24px;
+  overscroll-behavior:contain}
+.sheet-body .list-vsebina{min-height:calc(100% + 1px)}
 
 /* dnevna glava */
 /* Glava strani »Vse«. Razpon datumov je nacentriran na sredino
@@ -1193,7 +1205,10 @@ function renderDay(focusId){
   const minuloDan = key < tISO;
   html += '<button class="add-btn" id="addNote"'+(minuloDan ? " disabled" : "")+
           '>+ &nbsp;Nov zapisek</button>';
-  dayBody.innerHTML = html;
+  /* Ovoj poskrbi, da ima seznam VEDNO vsaj eno piko česa za drseti.
+     Brez tega prst pri enem samem zapisku premika stran pod listom.
+     (Sklop 3, točka 41, 30. 8. 2026.) */
+  dayBody.innerHTML = '<div class="list-vsebina">'+html+'</div>';
 
   if(focusId){
     const el = dayBody.querySelector('[data-id="'+focusId+'"] .note-text');
@@ -1858,7 +1873,7 @@ function openAll(){
     for(const t of done) html += vrsticaZapiska(t, false);
     html += '</div>';
   }
-  allBody.innerHTML = html;
+  allBody.innerHTML = '<div class="list-vsebina">'+html+'</div>';
   allSheet.classList.add("open");
   aktivniSeznam = "vse";
 }
