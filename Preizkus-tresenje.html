@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="sl">
+<head>
+<meta charset="utf-8">
+<!-- ISTI viewport kot v aplikaciji -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, interactive-widget=resizes-content">
+<title>Preizkus: od kod tresenje</title>
+<style>
+  :root{ --vidna-visina:100%; --vidni-vrh:0px; }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overscroll-behavior:none;font:16px/1.4 -apple-system,system-ui,sans-serif}
+
+  /* ---- ozadje: enako kot glavni seznam v aplikaciji ---- */
+  #app{position:fixed;inset:0;display:flex;flex-direction:column;background:#eef}
+  #feed{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:10px}
+  .teden{height:110px;margin-bottom:8px;border-radius:12px;background:#fff;border:1px solid #ccd;
+    display:flex;align-items:center;justify-content:center;color:#66c;font-weight:800;font-size:19px}
+  #app.skrit{visibility:hidden}
+  /* NAČIN D: ozadje zamrznjeno - seznam ni več drseč, ampak pritrjen blok,
+     zamaknjen navzgor za toliko, kolikor je bil zdrsan. Uhojena pot za iOS. */
+  #feed.zamrznjen{position:fixed;left:0;right:0;overflow:hidden;height:auto}
+
+  /* ---- NAČIN E: ovoj, ki prestreže premikanje (uhojena pot ISL) ---- */
+  #ovoj{position:fixed;inset:0;z-index:40;overflow:hidden;display:none}
+  #ovoj.na{display:block}
+  #ovoj .drsnik{height:100%;overflow-y:auto;overscroll-behavior:none;-webkit-overflow-scrolling:touch}
+  #ovoj .vsebina{height:calc(100% + 1px)}
+
+  /* ---- dnevni list: ENAKO pravilo kot v aplikaciji ---- */
+  .sheet{
+    position:fixed;inset:0;z-index:50;background:#fafafa;
+    display:flex;flex-direction:column;
+    top:var(--vidni-vrh);bottom:auto;height:var(--vidna-visina);
+  }
+  .glava{flex:0 0 auto;padding:7px 10px;background:#fff;border-bottom:1px solid #ddd;font-size:14px}
+  .telo{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px}
+
+  .gumbi{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:8px}
+  .gumbi button{padding:8px 2px;border:2px solid #55f;border-radius:10px;background:#fff;
+    color:#33c;font-weight:800;font-size:19px;line-height:1.15}
+  .gumbi button small{display:block;font-size:10px;font-weight:600;margin-top:2px}
+  .gumbi button.on{background:#55f;color:#fff}
+
+  .nihanje{font-size:38px;font-weight:800;text-align:center;padding:8px 0 2px;color:#c00}
+  .nihanje small{display:block;font-size:12px;font-weight:700;color:#555;letter-spacing:.02em}
+  .kaj{text-align:center;font-size:13px;color:#444;font-weight:700;padding-bottom:8px}
+
+  .stevilke{font:12px/1.5 ui-monospace,Menlo,monospace;background:#fff;border:1px solid #ddd;
+    border-radius:10px;padding:8px;white-space:pre}
+
+  .zapisek{margin-top:10px;border:1px solid #ddd;border-radius:12px;background:#fff;padding:12px}
+  .polje{font-size:17px;outline:none;min-height:24px}
+  .polje:empty::before{content:"Kliknite sem in pišite…";color:#aaa}
+  .navodilo{margin-top:10px;font-size:14px;color:#555}
+  .navodilo b{color:#000}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="feed">
+    <div class="teden">teden 1</div><div class="teden">teden 2</div>
+    <div class="teden">teden 3</div><div class="teden">teden 4</div>
+    <div class="teden">teden 5</div><div class="teden">teden 6</div>
+    <div class="teden">teden 7</div><div class="teden">teden 8</div>
+  </div>
+</div>
+
+<!-- način E: prozoren ovoj čez ozadje -->
+<div id="ovoj"><div class="drsnik"><div class="vsebina"></div></div></div>
+
+<section class="sheet" id="list">
+  <div class="glava"><b>Dnevni list</b> – preizkus tresenja</div>
+  <div class="telo">
+
+    <div class="gumbi">
+      <button id="gA" class="on">A<small>kot zdaj</small></button>
+      <button id="gB">B<small>transform</small></button>
+      <button id="gC">C<small>brez lovljenja</small></button>
+      <button id="gD">D<small>zamrzni</small></button>
+      <button id="gE">E<small>ovoj</small></button>
+    </div>
+
+    <div class="nihanje" id="nihanje">0,0 px<small>NIHANJE LISTA V ZADNJI SEKUNDI</small></div>
+    <div class="kaj" id="kaj"></div>
+    <div class="stevilke" id="stevilke">merim…</div>
+
+    <div class="zapisek">
+      <div class="polje" contenteditable="true" id="polje"></div>
+    </div>
+
+    <p class="navodilo">
+      1. Kliknite v polje, da se odpre tipkovnica.<br>
+      2. S prstom povlecite gor in dol po zapisku – tako kot takrat, ko se trese.<br>
+      3. Poglejte veliko rdečo številko.<br>
+      4. Ponovite pri <b>A, B, C, D in E</b>. Pri vsaki <b>posnetek zaslona</b>.<br><br>
+      Gumbe lahko pritiskate, tudi ko je tipkovnica odprta.
+    </p>
+
+  </div>
+</section>
+
+<script>
+var vidno = window.visualViewport;
+var kor   = document.documentElement;
+var list  = document.getElementById('list');
+var app   = document.getElementById('app');
+var feed  = document.getElementById('feed');
+var ovoj  = document.getElementById('ovoj');
+var nacin = 'A';
+var zapomnjenOdmik = 0;
+
+var OPIS = {
+  A:'kot aplikacija danes: list lovi zaslon z lastnostjo top, ozadje skrito',
+  B:'list lovi zaslon s transform, ozadje skrito',
+  C:'list sploh ne lovi zaslona, ozadje skrito',
+  D:'ozadje ZAMRZNJENO (position:fixed), vidno; list lovi kot pri A',
+  E:'čez ozadje položen OVOJ, ki prestreže premikanje; list lovi kot pri A'
+};
+
+function odmrzni(){
+  if(feed.classList.contains('zamrznjen')){
+    feed.classList.remove('zamrznjen');
+    feed.style.top = '';
+    feed.scrollTop = zapomnjenOdmik;
+  }
+}
+function zamrzni(){
+  if(feed.classList.contains('zamrznjen')) return;
+  zapomnjenOdmik = feed.scrollTop;
+  feed.style.top = (-zapomnjenOdmik) + 'px';
+  feed.classList.add('zamrznjen');
+}
+
+function postavi(){
+  odmrzni();
+  ovoj.classList.remove('na');
+  app.classList.remove('skrit');
+  list.style.transform = '';
+  kor.style.setProperty('--vidni-vrh','0px');
+
+  if(nacin === 'A' || nacin === 'D' || nacin === 'E'){
+    if(nacin === 'A') app.classList.add('skrit');
+    if(nacin === 'D') zamrzni();
+    if(nacin === 'E') ovoj.classList.add('na');
+    if(vidno) kor.style.setProperty('--vidni-vrh', vidno.offsetTop + 'px');
+  } else if(nacin === 'B'){
+    app.classList.add('skrit');
+    if(vidno) list.style.transform = 'translateY(' + vidno.offsetTop + 'px)';
+  } else {                      // C
+    app.classList.add('skrit');
+  }
+}
+
+function uskladi(){
+  if(!vidno) return;
+  kor.style.setProperty('--vidna-visina', vidno.height + 'px');
+  postavi();
+}
+if(vidno){
+  vidno.addEventListener('resize', uskladi);
+  vidno.addEventListener('scroll', uskladi);
+  uskladi();
+}
+
+/* Merjenje: vsak izris pogledamo, kje list v resnici je, in si zapomnimo
+   najvišjo in najnižjo lego v zadnji sekundi. Razlika je nihanje. */
+var vzorci = [];
+function korak(){
+  var t = list.getBoundingClientRect().top;
+  var zdaj = performance.now();
+  vzorci.push([zdaj, t]);
+  while(vzorci.length && zdaj - vzorci[0][0] > 1000) vzorci.shift();
+  var gor = -1e9, dol = 1e9;
+  for(var i=0;i<vzorci.length;i++){
+    if(vzorci[i][1] > gor) gor = vzorci[i][1];
+    if(vzorci[i][1] < dol) dol = vzorci[i][1];
+  }
+  var nih = (vzorci.length > 1) ? (gor - dol) : 0;
+  document.getElementById('nihanje').innerHTML =
+    nih.toFixed(1).replace('.',',') + ' px<small>NIHANJE LISTA V ZADNJI SEKUNDI</small>';
+  document.getElementById('kaj').textContent = nacin + ' – ' + OPIS[nacin];
+  document.getElementById('stevilke').textContent = [
+    'window.innerHeight        ' + window.innerHeight,
+    'visualViewport.height     ' + (vidno ? Math.round(vidno.height*10)/10 : '-'),
+    'visualViewport.offsetTop  ' + (vidno ? Math.round(vidno.offsetTop*10)/10 : '-'),
+    'list.top (izmerjeno)      ' + Math.round(t*10)/10,
+    'list.height               ' + Math.round(list.getBoundingClientRect().height*10)/10
+  ].join('\n');
+  requestAnimationFrame(korak);
+}
+requestAnimationFrame(korak);
+
+['A','B','C','D','E'].forEach(function(n){
+  document.getElementById('g'+n).addEventListener('click', function(){
+    nacin = n; vzorci = [];
+    ['A','B','C','D','E'].forEach(function(m){
+      document.getElementById('g'+m).classList.toggle('on', m === n);
+    });
+    uskladi();
+    postavi();
+  });
+});
+</script>
+</body>
+</html>
