@@ -243,6 +243,21 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   top:var(--vidni-vrh);bottom:auto;height:var(--vidna-visina);
 }
 .sheet.open{transform:translateY(0);visibility:visible}
+/* Ko je odprta tipkovnica, se dnevni list skrči na vidni del zaslona.
+   Pod njim ostane pas strani, ki ga list ne pokriva - tam se je videl
+   tedenski oziroma mesečni prikaz, in kar je huje: dal se je DRSITI.
+   Ker je tipkovnica rahlo prosojna, se je to videlo tudi skoznjo, list
+   pa se je ob tem tresel, ker je ob vsakem premiku znova lovil vidni
+   del zaslona.
+   Izmerjeno 30. 8. 2026 na telefonu: pas je visok 154 px; Safari
+   navodila interactive-widget=resizes-content ne upošteva, ampak stran
+   zamakne (visualViewport.offsetTop = 159,66).
+   Popravek: dokler je tipkovnica odprta, je stran za listom skrita.
+   Skrit element se ne vidi in se ga ne da premikati s prstom, zato
+   izgineta oba pojava hkrati. To je ustaljena pot za okenca na iOS:
+   ozadja se ne pusti drseti (overflow:hidden tam ne zadošča).
+   (Sklop 3, točka 41, 30. 8. 2026.) */
+html.tipkovnica #app{visibility:hidden}
 .sheet-top{
   flex:0 0 auto;height:calc(var(--topbar-h) + env(safe-area-inset-top));
   padding-top:env(safe-area-inset-top);
@@ -1939,6 +1954,10 @@ function uskladiZVidnim(){
   const kor = document.documentElement;
   kor.style.setProperty("--vidna-visina", vidno.height + "px");
   kor.style.setProperty("--vidni-vrh",    vidno.offsetTop + "px");
+  /* Tipkovnica je odprta, kadar je vidni del zaslona občutno manjši od
+     strani. Prag 60 px je zato, da vrstica z naslovom brskalnika, ki se
+     ob drsenju skrije in pokaže, tega ne vklaplja po nepotrebnem. */
+  kor.classList.toggle("tipkovnica", (kor.clientHeight - vidno.height) > 60);
 }
 if(vidno){
   vidno.addEventListener("resize", uskladiZVidnim);
