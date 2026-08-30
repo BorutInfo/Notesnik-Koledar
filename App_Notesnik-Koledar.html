@@ -221,8 +221,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   background:var(--surface);border:1px solid var(--line);border-radius:12px;
   display:flex;flex-direction:column;
 }
+/* Debelina 400: imena mesecev naj bodo navadne debeline (Želje, 30. 8. 2026). */
 .mini h4{flex:1;margin:0;display:flex;align-items:center;justify-content:center;
-  font-size:13px;font-weight:700;letter-spacing:.02em;text-transform:uppercase}
+  font-size:13px;font-weight:400;letter-spacing:.02em;text-transform:uppercase}
 .mini .mcnt{flex:1;display:flex;align-items:center;justify-content:center;
   font-size:15px;font-weight:750;color:var(--accent)}
 .mini .mcnt.prazno{color:transparent}
@@ -254,8 +255,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .sheet-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 24px}
 
 /* dnevna glava */
-.day-hero{padding:6px 6px 14px}
-.day-hero .big{font-size:28px;font-weight:750;letter-spacing:-.025em}
+/* Glava strani »Vse«. Razpon datumov je nacentriran na sredino
+   (Želje, 30. 8. 2026). Razred .big je odpadel s točko 37. */
+.day-hero{padding:6px 6px 14px;text-align:center}
 .day-hero .small{font-size:14px;color:var(--dim);margin-top:2px}
 
 /* alineje */
@@ -447,8 +449,8 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 .opt.potrdi{background:var(--accent);color:#fff;justify-content:center;font-weight:700}
 
 /* ---- koledar za "Drug datum" (lastna komponenta) ---- */
-.cal{-webkit-user-select:none;user-select:none}
-.cal-head{display:flex;align-items:center;gap:6px;padding:2px 2px 12px}
+.cal{-webkit-user-select:none;user-select:none;display:flex;flex-direction:column}
+.cal-head{display:flex;align-items:center;gap:6px;padding:2px 2px 10px;flex:0 0 auto}
 .cal-title{flex:1;text-align:center;font-size:17px;font-weight:700;letter-spacing:-.01em}
 .cal-nav{
   width:38px;height:38px;border-radius:50%;background:var(--bg);color:var(--accent);
@@ -456,20 +458,47 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 }
 .cal-nav:active{background:var(--accent-soft)}
 .cal-nav[disabled]{color:var(--line);pointer-events:none}
-.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);margin-bottom:5px}
+/* Vrstica dni: ena sama črka, isti razmik kot mreža, da črka stoji nad
+   sredino svojega stolpca. Enako kot v mesečnem prikazu. (30. 8. 2026.) */
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;flex:0 0 auto}
 .cal-dow span{text-align:center;font-size:11px;font-weight:700;color:var(--dim);
-  text-transform:uppercase;letter-spacing:.04em}
+  text-transform:uppercase;letter-spacing:0}
+
+/* Drseči seznam mesecev. Brez zaskakovanja, zato sta med drsenjem vidna
+   del enega in del naslednjega meseca. Glava, vrstica dni in gumb Nazaj
+   ostanejo na isti višini, ker seznam drsi sam v sebi. */
+.cal-list{
+  /* position:relative je nujen: brez njega se offsetTop mesecev meri
+     glede na okence in ne glede na seznam, zato koledar zdrsne predaleč.
+     Ista past kot pri #feed. Izmerjeno 30. 8. 2026. */
+  position:relative;
+  flex:1 1 auto;height:320px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;scrollbar-width:none;
+}
+.cal-list::-webkit-scrollbar{display:none}
+.cal-crta{
+  display:flex;align-items:center;gap:10px;padding:12px 2px 8px;
+  font-size:11px;font-weight:700;letter-spacing:.03em;color:var(--dim);text-transform:uppercase;
+}
+.cal-crta::before,.cal-crta::after{content:"";flex:1;height:1px;background:var(--line)}
+.cal-mesec:first-child .cal-crta{padding-top:2px}
+
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .cal-day{
-  aspect-ratio:1/1;border-radius:10px;background:var(--bg);
+  aspect-ratio:1/1;min-width:0;width:100%;border-radius:10px;background:var(--bg);
   display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;
 }
 .cal-day:active{background:var(--accent-soft)}
 .cal-day.pad{background:transparent;pointer-events:none}
-.cal-day.today{box-shadow:inset 0 0 0 1.5px var(--accent);color:var(--accent)}
-.cal-day.sel{background:var(--accent);color:#fff;font-weight:750}
-/* .off je namenoma zadnji, da posivi tudi današnji dan, če ni izbirljiv */
-.cal-day.off{color:var(--line);background:transparent;pointer-events:none}
+/* Vrstni red je pomemben in je bil izbran 30. 8. 2026:
+   .off posivi navadne dneve; .sel obrobi dan, v katerem ste urejali;
+   .today pobarva celo polje in je ZADNJI, ker ob prekrivanju zmaga
+   današnji dan. Zadnja vrstica poskrbi, da nedejavnih dni ni mogoče
+   klikniti, ne glede na to, kako so pobarvani. */
+.cal-day.off{color:var(--line);background:transparent;box-shadow:none}
+.cal-day.sel{box-shadow:inset 0 0 0 2px var(--accent);color:var(--accent);font-weight:750;background:var(--bg)}
+.cal-day.today{background:var(--accent);color:#fff;font-weight:750;box-shadow:none}
+.cal-day.off{pointer-events:none}
 .cal-nazaj{margin-top:10px}
 
 .add-btn{
@@ -1600,10 +1629,15 @@ moveModal.addEventListener("click", ev => {
     const naloga = state.tasks.find(x => x.id === moveId); if(!naloga) return;
     const host = document.getElementById("moveCalHost");
     host.innerHTML = "";
+    /* Pravilo dejavnosti (sklop 3, točka 28, 30. 8. 2026):
+       dejavni so vsi datumi med današnjim in tistim, na katerem zapisek
+       leži, in vsi za njim. Nedejavna ostaneta današnji datum in datum,
+       na katerem zapisek že leži - premik nanju ne bi spremenil ničesar. */
+    const tISO = todayISO(), lezi = danZapiska(naloga);
     host.appendChild(KoledarIzbirnik({
-      min: iso(addDays(parseISO(danZapiska(naloga)), 1)),   // nazaj se ne da
-      izbrano: naloga.defer || null,
-      danes: todayISO(),
+      danes: tISO,
+      izbrano: lezi,
+      dejaven: d => d > tISO && d !== lezi,
       izbira: d => zacniPremik(d)
     }));
     moveKorak(3);
@@ -1644,77 +1678,114 @@ moveModal.addEventListener("click", ev => {
    ============================================================ */
 function KoledarIzbirnik(nastavitve){
   const o = nastavitve || {};
-  const MES = MES_KRATKO;
-  const DNI = ["pon","tor","sre","čet","pet","sob","ned"];
+  const DNI = ["p","t","s","č","p","s","n"];
   const p2  = n => String(n).padStart(2,"0");
 
-  // kateri mesec pokažemo, ko se koledar odpre
-  const zacetni = o.izbrano || o.min || o.danes;
-  let leto, mesec;
-  if(zacetni){ const d = zacetni.split("-"); leto = +d[0]; mesec = +d[1]-1; }
-  else { const n = new Date(); leto = n.getFullYear(); mesec = n.getMonth(); }
+  /* Seznam se začne pri mesecu današnjega dne in traja 24 mesecev
+     (dogovorjeno 30. 8. 2026). Če zapisek leži dlje, se podaljša do njega,
+     sicer ga v seznamu sploh ne bi bilo. */
+  const zd = (o.danes || "").split("-");
+  const leto0 = +zd[0], mesec0 = +zd[1]-1;
+  let dolzina = o.mesecev || 24;
+  if(o.izbrano){
+    const iz = o.izbrano.split("-");
+    const razlika = (+iz[0]-leto0)*12 + (+iz[1]-1-mesec0) + 2;
+    if(razlika > dolzina) dolzina = razlika;
+  }
 
   const el = document.createElement("div");
   el.className = "cal";
+  el.innerHTML =
+    '<div class="cal-head">'+
+      '<button class="cal-nav" data-skok="-1">‹</button>'+
+      '<div class="cal-title"></div>'+
+      '<button class="cal-nav" data-skok="1">›</button>'+
+    '</div>'+
+    '<div class="cal-dow">'+DNI.map(x=>"<span>"+x+"</span>").join("")+'</div>'+
+    '<div class="cal-list"></div>';
 
-  function risi(){
-    const prvi    = new Date(leto, mesec, 1);
-    const zamik   = (prvi.getDay()+6)%7;                 // ponedeljek = 0
-    const dolzina = new Date(leto, mesec+1, 0).getDate();
+  const naslov = el.querySelector(".cal-title");
+  const seznam = el.querySelector(".cal-list");
+  const nazaj  = el.querySelector('[data-skok="-1"]');
+  const naprej = el.querySelector('[data-skok="1"]');
 
-    const prviVMesecu   = leto+"-"+p2(mesec+1)+"-01";
-    const zadnjiVMesecu = leto+"-"+p2(mesec+1)+"-"+p2(dolzina);
-    const nazajNi  = (o.min && prviVMesecu   <= o.min) ? "disabled" : "";
-    const naprejNi = (o.max && zadnjiVMesecu >= o.max) ? "disabled" : "";
-
+  function blokMeseca(k){
+    const leto  = leto0 + Math.floor((mesec0+k)/12);
+    const mesec = ((mesec0+k) % 12 + 12) % 12;
+    const zamik = (new Date(leto,mesec,1).getDay()+6)%7;   // ponedeljek = 0
+    const dni   = new Date(leto,mesec+1,0).getDate();
     let celice = "";
-    for(let k=0;k<zamik;k++) celice += '<div class="cal-day pad"></div>';
-    for(let d=1; d<=dolzina; d++){
+    for(let i=0;i<zamik;i++) celice += '<div class="cal-day pad"></div>';
+    for(let d=1; d<=dni; d++){
       const datum = leto+"-"+p2(mesec+1)+"-"+p2(d);
       let razred = "cal-day";
-      if((o.min && datum < o.min) || (o.max && datum > o.max)) razred += " off";
-      if(datum === o.danes)   razred += " today";
+      if(o.dejaven && !o.dejaven(datum)) razred += " off";
       if(datum === o.izbrano) razred += " sel";
+      if(datum === o.danes)   razred += " today";
       celice += '<button class="'+razred+'" data-d="'+datum+'">'+d+'</button>';
     }
-
-    el.innerHTML =
-      '<div class="cal-head">'+
-        '<button class="cal-nav" data-skok="-1" '+nazajNi+'>‹</button>'+
-        '<div class="cal-title">'+MES[mesec]+' '+leto+'</div>'+
-        '<button class="cal-nav" data-skok="1" '+naprejNi+'>›</button>'+
-      '</div>'+
-      '<div class="cal-dow">'+DNI.map(s=>"<span>"+s+"</span>").join("")+'</div>'+
-      '<div class="cal-grid">'+celice+'</div>';
+    const sek = document.createElement("section");
+    sek.className = "cal-mesec";
+    sek.dataset.k = k;
+    sek.dataset.ime = MES_KRATKO[mesec]+" "+leto;
+    sek.innerHTML = '<div class="cal-crta">'+MES_KRATKO[mesec]+" "+leto+'</div>'+
+                    '<div class="cal-grid">'+celice+'</div>';
+    return sek;
   }
+
+  /** Kateri mesec je trenutno na vrhu seznama. */
+  function mesecNaVrhu(){
+    const vrh = seznam.scrollTop + 4;
+    let k = 0;
+    for(const sek of seznam.children) if(sek.offsetTop <= vrh) k = Number(sek.dataset.k);
+    return k;
+  }
+  function osveziGlavo(){
+    const k = mesecNaVrhu();
+    naslov.textContent = seznam.children[k].dataset.ime;
+    nazaj.disabled  = (k === 0);
+    naprej.disabled = (k >= dolzina-1);
+  }
+  function naMesec(smer){
+    const k = Math.min(dolzina-1, Math.max(0, mesecNaVrhu() + smer));
+    seznam.scrollTo({ top: seznam.children[k].offsetTop, behavior:"smooth" });
+  }
+
+  let cakam = false;
+  seznam.addEventListener("scroll", () => {
+    if(cakam) return;
+    cakam = true;
+    requestAnimationFrame(() => { cakam = false; osveziGlavo(); });
+  }, {passive:true});
 
   el.addEventListener("click", ev => {
     const nav = ev.target.closest("[data-skok]");
-    if(nav){
-      mesec += Number(nav.dataset.skok);
-      if(mesec < 0){ mesec = 11; leto--; }
-      if(mesec > 11){ mesec = 0;  leto++; }
-      risi();
-      return;
-    }
+    if(nav){ naMesec(Number(nav.dataset.skok)); return; }
     const dan = ev.target.closest("[data-d]");
-    if(dan){
-      o.izbrano = dan.dataset.d;                 // da se izbira takoj obarva
-      risi();
-      if(typeof o.izbira === "function") o.izbira(dan.dataset.d);
+    if(dan && !dan.classList.contains("off") && typeof o.izbira === "function"){
+      o.izbira(dan.dataset.d);
     }
   });
 
-  risi();
+  for(let k=0;k<dolzina;k++) seznam.appendChild(blokMeseca(k));
+
+  /* Odpremo pri mesecu, na katerem zapisek leži (dogovorjeno 30. 8. 2026).
+     Šele po vrisu, ker offsetTop prej ni znan. */
+  requestAnimationFrame(() => {
+    const cilj = (o.izbrano || o.danes).split("-");
+    const k = Math.max(0, Math.min(dolzina-1,
+      (+cilj[0]-leto0)*12 + (+cilj[1]-1-mesec0)));
+    seznam.scrollTop = seznam.children[k].offsetTop;
+    osveziGlavo();
+  });
+
   return el;
 }
 
-/* Opomba: sistemski izbirnik datuma je bil odstranjen.
-   Zdaj se za "Drug datum" uporablja sistemski izbirnik telefona
-   (<input type="date"> zgoraj v oknu za premik).
-   Celotna koda lastnega koledarja je shranjena v datoteki
-   koledar-izbirnik.html, če se bomo po preizkusu na telefonu
-   odločili zanjo. */
+/* Opomba: sistemski izbirnik datuma je bil odstranjen; uporabljamo
+   lastnega, ker se sistemski v gumbu "Drug datum" ni odprl zanesljivo.
+   Ista koda živi tudi v Preizkusi/koledar-izbirnik.html - ob vsaki
+   spremembi je treba posodobiti obe datoteki. */
 
 /* ============================================================
    7. VSE NALOGE ZA PRIKAZANO OBDOBJE
