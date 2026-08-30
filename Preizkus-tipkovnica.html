@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="sl">
+<head>
+<meta charset="utf-8">
+<!-- ISTI viewport kot v aplikaciji -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, interactive-widget=resizes-content">
+<title>Preizkus: tipkovnica in dnevni list</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;font:16px/1.4 -apple-system,system-ui,sans-serif}
+
+  /* Ozadje: debele črte. Če se skoznje kaj vidi, je luknja takoj očitna. */
+  body{background:repeating-linear-gradient(45deg,#ff5a5a 0 22px,#ffd0d0 22px 44px)}
+
+  /* List je narejen po ISTEM pravilu kot v aplikaciji. */
+  .list{
+    position:fixed;left:0;right:0;
+    top:var(--vidni-vrh,0px);
+    height:var(--vidna-visina,100%);
+    background:#fff;display:flex;flex-direction:column;
+    border-bottom:4px solid #0a0;
+  }
+  .glava{flex:0 0 auto;padding:10px 12px;background:#eef;border-bottom:1px solid #ccd;font-weight:700}
+  .telo{flex:1;overflow-y:auto;padding:12px}
+  .stevilke{font:13px/1.55 ui-monospace,Menlo,monospace;background:#f4f4f6;
+    border:1px solid #ddd;border-radius:10px;padding:10px;white-space:pre}
+  .polje{margin-top:14px;border:2px solid #55f;border-radius:10px;padding:12px 14px;
+    font-size:17px;min-height:48px;outline:none}
+  .polje:empty::before{content:"Kliknite sem in pišite…";color:#999}
+  .noga{flex:0 0 auto;padding:10px 12px;background:#0a0;color:#fff;font-weight:700;text-align:center}
+  .opomba{margin-top:12px;font-size:14px;color:#555}
+</style>
+</head>
+<body>
+
+<div class="list" id="list">
+  <div class="glava">Dnevni list – zgornji rob</div>
+  <div class="telo">
+    <div class="stevilke" id="stevilke">merim…</div>
+
+    <div class="polje" contenteditable="true" id="polje"></div>
+
+    <p class="opomba">
+      1. Posnetek zaslona <b>preden</b> odprete tipkovnico.<br>
+      2. Kliknite v modro polje, počakajte, da se tipkovnica odpre.<br>
+      3. Posnetek zaslona <b>s tipkovnico</b>.<br><br>
+      Če se med zelenim robom in tipkovnico vidijo <b>rdeče črte</b>,
+      je to luknja, skozi katero v aplikaciji gleda mesečni prikaz.
+    </p>
+  </div>
+  <div class="noga">Dnevni list – spodnji rob</div>
+</div>
+
+<script>
+var vidno = window.visualViewport;
+var list  = document.getElementById('list');
+var izpis = document.getElementById('stevilke');
+
+function uskladi(){
+  if(!vidno) return;
+  var kor = document.documentElement;
+  kor.style.setProperty('--vidna-visina', vidno.height + 'px');
+  kor.style.setProperty('--vidni-vrh',    vidno.offsetTop + 'px');
+}
+function pisi(){
+  var r = list.getBoundingClientRect();
+  var vrstice = [
+    'window.innerHeight        ' + window.innerHeight,
+    'docEl.clientHeight        ' + document.documentElement.clientHeight,
+    'visualViewport.height     ' + (vidno ? Math.round(vidno.height*100)/100 : 'NI PODPRT'),
+    'visualViewport.offsetTop  ' + (vidno ? Math.round(vidno.offsetTop*100)/100 : '-'),
+    'visualViewport.scale      ' + (vidno ? vidno.scale : '-'),
+    '',
+    'list.top                  ' + Math.round(r.top*100)/100,
+    'list.bottom               ' + Math.round(r.bottom*100)/100,
+    'list.height               ' + Math.round(r.height*100)/100,
+    '',
+    'LUKNJA pod listom         ' + Math.round((window.innerHeight - r.bottom)*100)/100 + ' px',
+    'devicePixelRatio          ' + window.devicePixelRatio
+  ];
+  izpis.textContent = vrstice.join('\n');
+}
+function osvezi(){ uskladi(); pisi(); }
+
+if(vidno){
+  vidno.addEventListener('resize', osvezi);
+  vidno.addEventListener('scroll', osvezi);
+}
+window.addEventListener('resize', osvezi);
+document.getElementById('polje').addEventListener('focus', function(){
+  setTimeout(osvezi, 300); setTimeout(osvezi, 700);
+});
+osvezi();
+setInterval(pisi, 400);
+</script>
+</body>
+</html>
