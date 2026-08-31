@@ -243,21 +243,6 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   top:var(--vidni-vrh);bottom:auto;height:var(--vidna-visina);
 }
 .sheet.open{transform:translateY(0);visibility:visible}
-/* Ko je odprta tipkovnica, se dnevni list skrči na vidni del zaslona.
-   Pod njim ostane pas strani, ki ga list ne pokriva - tam se je videl
-   tedenski oziroma mesečni prikaz, in kar je huje: dal se je DRSITI.
-   Ker je tipkovnica rahlo prosojna, se je to videlo tudi skoznjo, list
-   pa se je ob tem tresel, ker je ob vsakem premiku znova lovil vidni
-   del zaslona.
-   Izmerjeno 30. 8. 2026 na telefonu: pas je visok 154 px; Safari
-   navodila interactive-widget=resizes-content ne upošteva, ampak stran
-   zamakne (visualViewport.offsetTop = 159,66).
-   Popravek: dokler je tipkovnica odprta, je stran za listom skrita.
-   Skrit element se ne vidi in se ga ne da premikati s prstom, zato
-   izgineta oba pojava hkrati. To je ustaljena pot za okenca na iOS:
-   ozadja se ne pusti drseti (overflow:hidden tam ne zadošča).
-   (Sklop 3, točka 41, 30. 8. 2026.) */
-html.tipkovnica #app{visibility:hidden}
 .sheet-top{
   flex:0 0 auto;height:calc(var(--topbar-h) + env(safe-area-inset-top));
   padding-top:env(safe-area-inset-top);
@@ -267,19 +252,7 @@ html.tipkovnica #app{visibility:hidden}
 .sheet-back{font-size:15px;font-weight:600;color:var(--accent);padding:8px 10px;flex:0 0 auto}
 .sheet-title{flex:1;min-width:0;font-size:17px;font-weight:650;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* Seznam zapiskov v dnevu. Dve varovalki proti temu, da bi prst namesto
-   seznama premikal STRAN pod njim (od tam je prišlo tresenje):
-   1. overscroll-behavior:contain - ko pridete do konca seznama, se
-      premikanje ne prelije na stran pod njim. Isto varovalko imajo že
-      glavni seznam, kolesje za uro in koledar. Ta seznam je edini je ni
-      imel (najdeno 30. 8. 2026).
-   2. min-height:calc(100% + 1px) na vsebini - seznam ima VEDNO vsaj eno
-      piko česa za drseti. Brez tega prva varovalka ne zaleže: kadar v
-      seznamu ni česa drsati, prst gre naravnost na stran pod njim.
-      To je znana past in znana rešitev (glej tehnične opombe). */
-.sheet-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 24px;
-  overscroll-behavior:contain}
-.sheet-body .list-vsebina{min-height:calc(100% + 1px)}
+.sheet-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 24px}
 
 /* dnevna glava */
 /* Glava strani »Vse«. Razpon datumov je nacentriran na sredino
@@ -1205,10 +1178,7 @@ function renderDay(focusId){
   const minuloDan = key < tISO;
   html += '<button class="add-btn" id="addNote"'+(minuloDan ? " disabled" : "")+
           '>+ &nbsp;Nov zapisek</button>';
-  /* Ovoj poskrbi, da ima seznam VEDNO vsaj eno piko česa za drseti.
-     Brez tega prst pri enem samem zapisku premika stran pod listom.
-     (Sklop 3, točka 41, 30. 8. 2026.) */
-  dayBody.innerHTML = '<div class="list-vsebina">'+html+'</div>';
+  dayBody.innerHTML = html;
 
   if(focusId){
     const el = dayBody.querySelector('[data-id="'+focusId+'"] .note-text');
@@ -1873,7 +1843,7 @@ function openAll(){
     for(const t of done) html += vrsticaZapiska(t, false);
     html += '</div>';
   }
-  allBody.innerHTML = '<div class="list-vsebina">'+html+'</div>';
+  allBody.innerHTML = html;
   allSheet.classList.add("open");
   aktivniSeznam = "vse";
 }
@@ -1969,10 +1939,6 @@ function uskladiZVidnim(){
   const kor = document.documentElement;
   kor.style.setProperty("--vidna-visina", vidno.height + "px");
   kor.style.setProperty("--vidni-vrh",    vidno.offsetTop + "px");
-  /* Tipkovnica je odprta, kadar je vidni del zaslona občutno manjši od
-     strani. Prag 60 px je zato, da vrstica z naslovom brskalnika, ki se
-     ob drsenju skrije in pokaže, tega ne vklaplja po nepotrebnem. */
-  kor.classList.toggle("tipkovnica", (kor.clientHeight - vidno.height) > 60);
 }
 if(vidno){
   vidno.addEventListener("resize", uskladiZVidnim);
