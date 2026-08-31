@@ -1,0 +1,2130 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="utf-8">
+<!-- interactive-widget: naj tipkovnica stran res pomanjša, ne le potisne.
+     iOS Safari tega (še) ne podpira – tam to opravi Visual Viewport API
+     spodaj. Za Android in Chrome je to zastonj popravek. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, interactive-widget=resizes-content">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="color-scheme" content="light">
+<title>Notesnik</title>
+<style>
+/* ============================================================
+   1. SPREMENLJIVKE IN OSNOVE
+   ============================================================ */
+:root{
+  color-scheme: light;      /* brskalnik naj svoje dele riše svetlo */
+  --bg:#f6f6f4;
+  --surface:#ffffff;
+  --line:#e4e3df;
+  --text:#1c1b19;
+  --dim:#8a8781;
+  --accent:#4f46e5;
+  --accent-soft:#eceafe;
+  --danger:#c0392b;
+  --today:#fff6e0;
+  --obrocek:#4f46e5;      /* obroba obročka z odprtimi nalogami; sklop 5 jo bo
+                             prestavljal po stopnji nujnosti (bela–zelena–rumena–oranžna–rdeča) */
+  --radius:14px;
+  --topbar-h:56px;
+  --bottombar-h:64px;
+  /* Vidni del zaslona. Dokler ni tipkovnice, je to cel zaslon.
+     Ko se tipkovnica odpre, ju popravi Visual Viewport API. */
+  --vidna-visina:100%;
+  --vidni-vrh:0px;
+}
+/* TEMNI NAČIN JE ZAENKRAT IZKLOPLJEN.
+   Aplikacija ne sledi več sistemski nastavitvi telefona; vedno je svetla.
+   Ko bodo prišle nastavitve, se bo tema izbirala tam. Vrednosti so
+   shranjene spodaj, da jih bo mogoče vrniti brez ugibanja.
+
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#131312;
+    --surface:#1d1d1c;
+    --line:#2e2e2c;
+    --text:#eeedea;
+    --dim:#8d8b86;
+    --accent:#8b85f5;
+    --accent-soft:#26244a;
+    --danger:#e57373;
+    --today:#2a2415;
+  }
+}
+*/
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overscroll-behavior:none}
+body{
+  font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:var(--bg);color:var(--text);
+  -webkit-font-smoothing:antialiased;
+}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+/* nujno: naši gumbi imajo display:flex, kar bi sicer premagalo atribut hidden */
+[hidden]{display:none !important}
+
+/* ============================================================
+   2. POSTAVITEV: GLAVA / VSEBINA / NOGA
+   ============================================================ */
+#app{
+  position:fixed;inset:0;display:flex;flex-direction:column;
+  max-width:720px;margin:0 auto;
+  background:var(--bg);
+}
+#topbar{
+  height:calc(var(--topbar-h) + env(safe-area-inset-top));
+  padding-top:env(safe-area-inset-top);
+  flex:0 0 auto;display:flex;align-items:center;gap:10px;
+  padding-left:16px;padding-right:12px;
+  border-bottom:1px solid var(--line);
+  background:var(--surface);
+}
+#ctxTitle{flex:1;min-width:0;font-size:19px;font-weight:650;letter-spacing:-.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ctxTitle .sub{font-weight:400;color:var(--dim);font-size:15px;margin-left:6px}
+#btnToday{
+  flex:0 0 auto;font-size:14px;font-weight:600;color:var(--accent);
+  background:var(--accent-soft);padding:7px 13px;border-radius:999px;
+}
+/* position:relative je nujen – da se offsetTop otrok meri glede na #feed
+   in ne glede na #app (sicer se prvi dan skrije pod glavo). */
+#feed{flex:1;position:relative;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+
+#bottombar{
+  flex:0 0 auto;
+  height:calc(var(--bottombar-h) + env(safe-area-inset-bottom));
+  padding-bottom:env(safe-area-inset-bottom);
+  display:flex;align-items:center;gap:10px;padding-left:12px;padding-right:12px;
+  border-top:1px solid var(--line);background:var(--surface);
+}
+.seg{flex:1;display:flex;background:var(--bg);border-radius:11px;padding:3px;gap:2px}
+.seg button{
+  flex:1;padding:8px 4px;border-radius:9px;font-size:14px;font-weight:550;color:var(--dim);
+  transition:background .15s,color .15s;
+}
+.seg button.on{background:var(--surface);color:var(--text);font-weight:650;
+  box-shadow:0 1px 3px rgba(0,0,0,.10)}
+#btnAll{
+  flex:0 0 auto;font-size:14px;font-weight:600;padding:9px 14px;
+  border-radius:11px;background:var(--accent);color:#fff;
+}
+
+/* ============================================================
+   3. TEDENSKI POGLED – seznam dni
+   ============================================================ */
+.week-block{padding:0 12px}
+.week-head{
+  position:sticky;top:0;z-index:5;
+  display:flex;align-items:baseline;gap:8px;
+  padding:14px 6px 7px;background:var(--bg);
+  font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);
+}
+.week-head .range{text-transform:none;letter-spacing:0;font-weight:500}
+.days{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+
+.day-row{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  padding:13px 14px;border-bottom:1px solid var(--line);
+}
+.day-row:last-child{border-bottom:0}
+.day-row:active{background:var(--bg)}
+.day-row.is-today{background:var(--today)}
+.day-row.is-weekend .dnum,.day-row.is-weekend .dname{color:var(--dim)}
+
+.day-date{flex:0 0 52px;display:flex;flex-direction:column;align-items:center;line-height:1.1}
+.dnum{font-size:21px;font-weight:650;letter-spacing:-.02em}
+.dname{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);margin-top:2px}
+.day-row.is-today .dnum{color:var(--accent)}
+
+.day-body{flex:1;min-width:0}
+.day-chevron{flex:0 0 auto;color:var(--line);font-size:20px;margin-left:2px}
+
+/* Števca v vrstici dneva.
+   Obroček = odprte naloge, kljukica = opravljene. Obroček je namenoma
+   prazen; ko pride sklop 5, se njegova obroba obarva po najnujnejši
+   nalogi dneva – zato je barva na enem samem mestu (--obrocek). */
+.stevci{display:flex;align-items:center;gap:30px}
+.stevec{display:inline-flex;align-items:center;gap:7px;
+  font-size:17px;font-weight:600;line-height:1}
+.stevec .obrocek{
+  width:16px;height:16px;border-radius:50%;flex:0 0 auto;
+  background:transparent;border:2px solid var(--obrocek);
+}
+.stevec.opravljene{color:var(--dim);font-weight:500;gap:6px}
+
+/* ============================================================
+   4. MESEČNI POGLED – mreža
+   ============================================================ */
+.month-block{padding:6px 12px 20px}
+.month-head{
+  position:sticky;top:0;z-index:5;padding:14px 4px 8px;background:var(--bg);
+  font-size:17px;font-weight:700;letter-spacing:-.01em;
+}
+/* Razmik 4 px je isti kot v mreži dni spodaj. Brez njega so stolpci
+   vrstice dni široki 52,71 px, stolpci mreže pa 49,28 px, zato črka ni
+   stala nad sredino svojega stolpca. Odmik med črkami je 0, ker se pri
+   eni sami črki šteje tudi za njo in jo premakne z sredine.
+   (Sklop 3, dodatek 30. 8. 2026.) */
+.dow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px}
+.dow span{text-align:center;font-size:11px;font-weight:700;color:var(--dim);
+  text-transform:uppercase;letter-spacing:0}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cell{
+  aspect-ratio:1/1;border-radius:10px;background:var(--surface);border:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:3px;
+  font-size:15px;font-weight:550;
+  /* Številka dneva stoji VEDNO na vrhu polja, značka VEDNO na dnu
+     (space-between). Prej je bilo justify-content:center, zato se je
+     številka ob znački dvignila: izmerjeno 30. 8. 2026 je bila v isti
+     vrstici za 9,5 px više od sosednjih. Zdaj je razlika 0 – vse
+     številke stojijo v ravni liniji. Polje se ob znački podaljša.
+     Odmik je izbran 30. 8. 2026: brez njega (varianta A). Vrstica z
+     zapiskom je 53,6 px, vrstica brez njega ostane 49,3 px.
+     (Sklop 3, točka 36.) */
+  /* Polje se sme POVIŠATI, ne sme pa se razširiti.
+     Brez teh treh vrstic značka s številom nalog razširi stolpec (v mreži
+     je najmanjša širina samodejno enaka vsebini), razmerje stranic 1:1 pa
+     širino prenese nazaj v višino. Sedem takih polj je bilo široko 375,5 px,
+     zaslon pa daje 369 px – zadnji stolpec je padel čez desni rob.
+       min-width:0         stolpec se ne razširi po vsebini
+       width:100%          polje ostane široko natanko kot stolpec
+       align-self:stretch  vsa polja v isti vrstici so enako visoka
+     Izmerjeno 30. 8. 2026: brez katere koli od treh se popravek pokvari.
+     (Sklop 3, točka 36.) */
+  min-width:0;width:100%;align-self:stretch;
+}
+.cell.pad{background:transparent;border-color:transparent;color:transparent;pointer-events:none}
+.cell.is-today{background:var(--today);border-color:var(--accent);color:var(--accent);font-weight:750}
+.cell:active{background:var(--bg)}
+.cell .cnt{
+  min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--accent);
+  color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;
+}
+.cell .dot{width:5px;height:5px;border-radius:50%;background:var(--line)}
+
+/* ============================================================
+   5. LETNI POGLED – 12 mini mesecev
+   ============================================================ */
+.year-block{padding:6px 12px 24px}
+.year-head{position:sticky;top:0;z-index:5;padding:14px 4px 10px;background:var(--bg);
+  font-size:20px;font-weight:750;letter-spacing:-.02em}
+.year-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+/* Mesec je kvadrat vedno enake velikosti. Zgornja polovica nosi kratico
+   meseca, spodnja število odprtih nalog. Mreže dni in številk dni ni več,
+   zato klika na posamezen dan tu ni – klik na mesec odpre mesečni prikaz.
+   min-width:0 in width:100% sta tu iz istega razloga kot pri mesečni
+   celici: brez njiju vsebina razširi stolpec čez rob zaslona.
+   (Sklop 3, točka 29, 30. 8. 2026.) */
+.mini{
+  aspect-ratio:1/1;min-width:0;width:100%;padding:0;
+  background:var(--surface);border:1px solid var(--line);border-radius:12px;
+  display:flex;flex-direction:column;
+}
+/* Debelina 400: imena mesecev naj bodo navadne debeline (Želje, 30. 8. 2026). */
+.mini h4{flex:1;margin:0;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:400;letter-spacing:.02em;text-transform:uppercase}
+.mini .mcnt{flex:1;display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:750;color:var(--accent)}
+.mini .mcnt.prazno{color:transparent}
+.mini.je-danes{border-color:var(--accent)}
+.mini:active{background:var(--bg)}
+
+/* ============================================================
+   6. LISTI (dnevni pogled, vse naloge)
+   ============================================================ */
+.sheet{
+  position:fixed;inset:0;z-index:50;background:var(--bg);
+  display:flex;flex-direction:column;max-width:720px;margin:0 auto;
+  transform:translateY(100%);transition:transform .26s cubic-bezier(.32,.72,0,1);
+  visibility:hidden;
+  /* List se drži VIDNEGA dela zaslona, ne celega. Brez tega njegovo
+     dno konča pod tipkovnico in do njega ni mogoče zdrsniti. */
+  top:var(--vidni-vrh);bottom:auto;height:var(--vidna-visina);
+}
+.sheet.open{transform:translateY(0);visibility:visible}
+/* Ko je odprta tipkovnica, se dnevni list skrči na vidni del zaslona.
+   Pod njim ostane pas strani, ki ga list ne pokriva - tam se je videl
+   tedenski oziroma mesečni prikaz, in kar je huje: dal se je DRSITI.
+   Ker je tipkovnica rahlo prosojna, se je to videlo tudi skoznjo, list
+   pa se je ob tem tresel, ker je ob vsakem premiku znova lovil vidni
+   del zaslona.
+   Izmerjeno 30. 8. 2026 na telefonu: pas je visok 154 px; Safari
+   navodila interactive-widget=resizes-content ne upošteva, ampak stran
+   zamakne (visualViewport.offsetTop = 159,66).
+   Popravek: dokler je tipkovnica odprta, je stran za listom skrita.
+   Skrit element se ne vidi in se ga ne da premikati s prstom, zato
+   izgineta oba pojava hkrati. To je ustaljena pot za okenca na iOS:
+   ozadja se ne pusti drseti (overflow:hidden tam ne zadošča).
+   (Sklop 3, točka 41, 30. 8. 2026.) */
+html.tipkovnica #app{visibility:hidden}
+.sheet-top{
+  flex:0 0 auto;height:calc(var(--topbar-h) + env(safe-area-inset-top));
+  padding-top:env(safe-area-inset-top);
+  display:flex;align-items:center;gap:8px;padding-left:8px;padding-right:12px;
+  border-bottom:1px solid var(--line);background:var(--surface);
+}
+.sheet-back{font-size:15px;font-weight:600;color:var(--accent);padding:8px 10px;flex:0 0 auto}
+.sheet-title{flex:1;min-width:0;font-size:17px;font-weight:650;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:12px 12px 24px}
+
+/* dnevna glava */
+/* Glava strani »Vse«. Razpon datumov je nacentriran na sredino
+   (Želje, 30. 8. 2026). Razred .big je odpadel s točko 37. */
+.day-hero{padding:6px 6px 14px;text-align:center}
+.day-hero .small{font-size:14px;color:var(--dim);margin-top:2px}
+
+/* alineje */
+.notes{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+/* scroll-margin-bottom je namenoma 0: nov zapisek se poravna točno s
+   spodnjim robom vidnega dela, da pod njim ne pokuka odkljukani zapisek. */
+.note{display:flex;align-items:flex-start;gap:10px;padding:12px 12px;border-bottom:1px solid var(--line);
+  scroll-margin-bottom:0}
+.note:last-child{border-bottom:0}
+/* Krogec stoji desno od datuma (premaknjen 21. 8. 2026). */
+.chk{
+  flex:0 0 auto;width:22px;height:22px;border-radius:50%;
+  margin:0 0 4px 8px;vertical-align:middle;
+  border:2px solid var(--line);display:inline-flex;align-items:center;justify-content:center;
+  font-size:13px;color:transparent;transition:background .15s,border-color .15s;
+}
+.note.done .chk{background:var(--accent);border-color:var(--accent);color:#fff}
+.note-main{flex:1;min-width:0}
+.note-date{
+  display:inline-block;font-size:11px;font-weight:700;letter-spacing:.03em;
+  color:var(--accent);background:var(--accent-soft);
+  padding:2px 7px;border-radius:5px;margin-bottom:4px;
+}
+.note.carried .note-date::after{content:" ↷";font-weight:700}
+.note-text{
+  font-size:16px;line-height:1.4;outline:none;word-break:break-word;min-height:22px;
+}
+.note-text:empty::before{content:"Nov zapisek…";color:var(--dim)}
+.note.done .note-text{text-decoration:line-through;color:var(--dim)}
+.note-del{flex:0 0 auto;width:28px;height:28px;border-radius:50%;color:var(--dim);
+  font-size:17px;display:flex;align-items:center;justify-content:center}
+.note-del:active{background:var(--bg);color:var(--danger)}
+.note-move{flex:0 0 auto;width:28px;height:28px;border-radius:50%;color:var(--dim);
+  display:flex;align-items:center;justify-content:center}
+.note-move:active{background:var(--bg);color:var(--accent)}
+.note-move svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* --- ura na začetku besedila --- */
+.note-line{display:flex;align-items:flex-start;gap:8px}
+.ura-btn{
+  flex:0 0 auto;display:flex;align-items:baseline;gap:5px;margin-top:1px;
+  padding:2px 8px;border-radius:7px;background:var(--accent-soft);color:var(--accent);
+  font-size:15px;font-weight:700;letter-spacing:-.01em;line-height:1.35;
+}
+.ura-btn small{font-size:11px;font-weight:600;opacity:.8}
+.ura-btn:active{filter:brightness(.94)}
+.ura-btn.prazna{                       /* urica, dokler ure ni */
+  background:transparent;color:var(--dim);padding:2px 2px;
+}
+.ura-btn.prazna svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round;display:block}
+.note.done .ura-btn{background:transparent;color:var(--dim);text-decoration:line-through}
+.note.done .ura-btn.prazna{display:none}   /* odkljukani nalogi se ure ne da dodati */
+
+/* Med pisanjem novega zapiska so odkljukani skriti.
+   Vrnejo se takoj, ko pisanje končate. */
+.sheet-body.pisemo .note.done{display:none}
+
+/* opozorilna vrstica v okencu */
+.opozorilo{
+  margin:0 0 8px;padding:11px 14px;border-radius:11px;
+  background:#fdecea;color:#8c2f22;font-size:14px;font-weight:600;
+}
+.opozorilo.mirno{background:var(--bg);color:var(--dim);font-weight:500}
+/* Opozorilo o pretekli uri stoji na sredini okenca. */
+#uraOpozorilo{text-align:center}
+
+/* Odložen zapisek: namesto napisa stoji ikona – ukrivljena puščica v desno,
+   takoj desno ob krogcu za odkljukanje. Barva in ozadje sta enaka kot pri
+   datumu in uri, da se vsi trije znaki berejo kot ena družina. */
+.note-wait{
+  display:inline-flex;align-items:center;justify-content:center;
+  color:var(--accent);background:var(--accent-soft);
+  padding:5px 7px;border-radius:5px;margin:0 0 4px 8px;vertical-align:middle;
+}
+.note-wait svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round;display:block}
+
+/* ============================================================
+   6b. OKENCE ZA PREMIK NALOGE
+   ============================================================ */
+.modal{position:fixed;inset:0;z-index:60;visibility:hidden}
+.modal.open{visibility:visible}
+.modal-bg{position:absolute;inset:0;background:rgba(0,0,0,.38);opacity:0;transition:opacity .22s}
+.modal.open .modal-bg{opacity:1}
+.modal-card{
+  position:absolute;left:0;right:0;bottom:0;max-width:720px;margin:0 auto;
+  background:var(--surface);border-radius:20px 20px 0 0;
+  padding:8px 14px calc(16px + env(safe-area-inset-bottom));
+  transform:translateY(100%);transition:transform .24s cubic-bezier(.32,.72,0,1);
+  max-height:88vh;overflow-y:auto;
+}
+.modal.open .modal-card{transform:translateY(0)}
+.grip{width:38px;height:4px;border-radius:2px;background:var(--line);margin:8px auto 12px}
+.modal h3{margin:0 0 3px;font-size:18px;font-weight:700;letter-spacing:-.01em}
+.modal .lead{margin:0 0 14px;font-size:14px;color:var(--dim)}
+.opt{
+  display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;
+  padding:14px 15px;border-radius:12px;background:var(--bg);margin-bottom:8px;
+  font-size:16px;font-weight:600;text-align:left;
+}
+.opt:active{background:var(--accent-soft)}
+.opt .when{color:var(--dim);font-weight:400;font-size:14px;white-space:nowrap}
+.opt.reset{color:var(--accent)}
+.opt.cancel{background:transparent;justify-content:center;color:var(--dim);font-weight:550;margin-top:4px}
+.opt .chev{color:var(--dim);font-weight:400}
+
+/* --- koledar dveh tednov: ponedeljek levo, tri vrstice, petnajst dni --- */
+.oznaka{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--dim);padding:2px 4px 7px}
+.oznaka.sredina{text-align:center}
+.lead.sredina{text-align:center}
+
+/* glava okna za premik: ikona na sredini */
+.premik-glava{display:flex;align-items:center;justify-content:center;padding:2px 4px 10px}
+.premik-ikona{display:flex;align-items:center;justify-content:center;
+  width:44px;height:44px;color:var(--text)}
+.premik-ikona svg{width:30px;height:30px;stroke:currentColor;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* gumb z ikono na levi in nacentriranim napisom */
+.opt.sredinsko{justify-content:center;gap:9px}
+.ikona-levo{display:flex;align-items:center;justify-content:center;flex:0 0 auto;color:var(--dim)}
+.ikona-levo svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round;display:block}
+
+.dow-premik{display:grid;grid-template-columns:repeat(7,1fr);padding:0 5px 3px}
+.dow-premik span{text-align:center;font-size:11px;font-weight:700;color:var(--dim);
+  text-transform:uppercase;letter-spacing:.04em}
+.dayline{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;
+  background:var(--bg);border-radius:12px;padding:5px;margin-bottom:10px}
+.dayline button{
+  min-width:0;display:flex;align-items:center;justify-content:center;
+  padding:11px 1px;border-radius:9px;font-size:15px;font-weight:650;line-height:1;
+}
+.dayline button:active{background:var(--accent-soft)}
+.dayline .prazno{visibility:hidden;pointer-events:none}
+.dayline button.mimo{                      /* pretekli dnevi – vanje ni mogoče pisati */
+  color:var(--line);pointer-events:none;
+}
+.dayline button.cur{                       /* dan, na katerem smo – ni izbirljiv */
+  background:var(--surface);color:var(--accent);pointer-events:none;
+  box-shadow:inset 0 0 0 1.5px var(--accent);
+}
+.dayline button.wknd{color:var(--danger);opacity:.85}
+
+/* --- "Drug datum": sistemski izbirnik čez celo vrstico ---
+   Polje za datum je raztegnjeno čez ves gumb in prosojno, zato se
+   sistemski koledar odpre ob dotiku kjerkoli po vrstici, ne le na ikoni. */
+.pickwrap{position:relative}
+.pickwrap input{
+  position:absolute;inset:0;width:100%;height:100%;
+  opacity:0;border:0;margin:0;padding:0;
+  -webkit-appearance:none;appearance:none;background:transparent;
+}
+/* --- LASTNO KOLESJE ZA URO ---
+   Sistemsko kolesje ne spoštuje koraka 5 minut in se na telefonu
+   samo od sebe zapira, zato je narejeno lastno. Dva stolpca, ki se
+   vrtita in se zaskočita na sredino (scroll-snap). */
+.kolo{
+  position:relative;display:flex;align-items:stretch;justify-content:center;gap:4px;
+  height:176px;margin:4px 0 14px;background:var(--bg);border-radius:14px;overflow:hidden;
+}
+.kolo-pas{                          /* svetel pas, ki kaže izbrano vrstico */
+  position:absolute;left:10px;right:10px;top:50%;height:44px;margin-top:-22px;
+  background:var(--accent-soft);border-radius:10px;pointer-events:none;
+  z-index:0;                        /* mora biti POD številkami, sicer jih prekrije */
+}
+.kolo-dvopicje{
+  position:relative;z-index:1;
+  align-self:center;font-size:24px;font-weight:700;color:var(--dim);
+  padding-bottom:2px;pointer-events:none;
+}
+.kolo-stolpec{
+  position:relative;z-index:1;
+  width:82px;overflow-y:scroll;scroll-snap-type:y mandatory;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  scrollbar-width:none;padding:66px 0;             /* (176-44)/2 = 66 */
+}
+.kolo-stolpec::-webkit-scrollbar{display:none}
+.kolo-stolpec b{
+  display:flex;align-items:center;justify-content:center;
+  height:44px;scroll-snap-align:center;
+  font-size:26px;font-weight:600;letter-spacing:.01em;
+  color:var(--dim);font-variant-numeric:tabular-nums;
+}
+.kolo-stolpec b.on{color:var(--text);font-weight:750}
+.opt.potrdi{background:var(--accent);color:#fff;justify-content:center;font-weight:700}
+
+/* ---- koledar za "Drug datum" (lastna komponenta) ---- */
+.cal{-webkit-user-select:none;user-select:none;display:flex;flex-direction:column}
+.cal-head{display:flex;align-items:center;gap:6px;padding:2px 2px 10px;flex:0 0 auto}
+.cal-title{flex:1;text-align:center;font-size:17px;font-weight:700;letter-spacing:-.01em}
+.cal-nav{
+  width:38px;height:38px;border-radius:50%;background:var(--bg);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex:0 0 auto;
+}
+.cal-nav:active{background:var(--accent-soft)}
+.cal-nav[disabled]{color:var(--line);pointer-events:none}
+/* Vrstica dni: ena sama črka, isti razmik kot mreža, da črka stoji nad
+   sredino svojega stolpca. Enako kot v mesečnem prikazu. (30. 8. 2026.) */
+.cal-dow{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;flex:0 0 auto}
+.cal-dow span{text-align:center;font-size:11px;font-weight:700;color:var(--dim);
+  text-transform:uppercase;letter-spacing:0}
+
+/* Drseči seznam mesecev. Brez zaskakovanja, zato sta med drsenjem vidna
+   del enega in del naslednjega meseca. Glava, vrstica dni in gumb Nazaj
+   ostanejo na isti višini, ker seznam drsi sam v sebi. */
+.cal-list{
+  /* position:relative je nujen: brez njega se offsetTop mesecev meri
+     glede na okence in ne glede na seznam, zato koledar zdrsne predaleč.
+     Ista past kot pri #feed. Izmerjeno 30. 8. 2026. */
+  position:relative;
+  flex:1 1 auto;height:320px;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;scrollbar-width:none;
+}
+.cal-list::-webkit-scrollbar{display:none}
+.cal-crta{
+  display:flex;align-items:center;gap:10px;padding:12px 2px 8px;
+  font-size:11px;font-weight:700;letter-spacing:.03em;color:var(--dim);text-transform:uppercase;
+}
+.cal-crta::before,.cal-crta::after{content:"";flex:1;height:1px;background:var(--line)}
+.cal-mesec:first-child .cal-crta{padding-top:2px}
+
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-day{
+  aspect-ratio:1/1;min-width:0;width:100%;border-radius:10px;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:600;
+}
+.cal-day:active{background:var(--accent-soft)}
+.cal-day.pad{background:transparent;pointer-events:none}
+/* Vrstni red je pomemben in je bil izbran 30. 8. 2026:
+   .off posivi navadne dneve; .sel obrobi dan, v katerem ste urejali;
+   .today pobarva celo polje in je ZADNJI, ker ob prekrivanju zmaga
+   današnji dan. Zadnja vrstica poskrbi, da nedejavnih dni ni mogoče
+   klikniti, ne glede na to, kako so pobarvani. */
+.cal-day.off{color:var(--line);background:transparent;box-shadow:none}
+.cal-day.sel{box-shadow:inset 0 0 0 2px var(--accent);color:var(--accent);font-weight:750;background:var(--bg)}
+.cal-day.today{background:var(--accent);color:#fff;font-weight:750;box-shadow:none}
+.cal-day.off{pointer-events:none}
+.cal-nazaj{margin-top:10px}
+
+.add-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+  margin-top:12px;padding:14px;border-radius:var(--radius);
+  background:var(--accent);color:#fff;font-size:16px;font-weight:650;
+}
+.add-btn:active{opacity:.85}
+/* Pretekli dan: v tak dan zapiska ni mogoče vpisati – zapisek bi se takoj
+   prenesel na današnji dan in v tem dnevu sploh ne bi bil viden. Zato je
+   gumb posivljen in ugasnjen. Izmerjeno 22. 8. 2026. */
+.add-btn[disabled]{background:var(--line);color:var(--dim);font-weight:600}
+.add-btn[disabled]:active{opacity:1}
+
+.empty{text-align:center;color:var(--dim);font-size:15px;padding:34px 20px}
+
+/* skupine v "vse naloge" */
+.group-title{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--dim);padding:18px 6px 8px;text-align:center}
+.group-title:first-child{padding-top:4px}
+
+/* Ločilna črta med datumi nastanka v seznamu »Vse naloge«.
+   Samo v skupini »Odprte« – tam je seznam po datumu nastanka že urejen,
+   zato je črta samo izris. V skupini »Opravljene« črt ni.
+   Napis na črti in značka na zapisku pod njo kažeta isti datum.
+   (Sklop 3, točka 32.) */
+.crta{
+  display:flex;align-items:center;gap:10px;padding:9px 12px 7px;
+  background:var(--bg);
+  font-size:11px;font-weight:700;letter-spacing:.03em;color:var(--dim);
+}
+.crta::before,.crta::after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* ============================================================
+   8. OBVESTILO PO PREMIKU
+   En sam trak nad vsem drugim. Na dotik se namenoma ne odziva
+   (pointer-events:none), zato ne more prestreči klika na gumb pod njim.
+   ============================================================ */
+#obvestilo{
+  position:fixed;left:50%;bottom:calc(26px + env(safe-area-inset-bottom));
+  z-index:70;pointer-events:none;
+  max-width:min(88vw,420px);
+  padding:12px 18px;border-radius:999px;
+  background:#e7e6e2;color:#1c1b19;
+  box-shadow:0 2px 10px rgba(0,0,0,.14);
+  font-size:17px;font-weight:600;letter-spacing:-.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  opacity:0;transform:translate(-50%,10px);
+  transition:opacity .18s ease,transform .18s ease;
+}
+#obvestilo.vidno{opacity:1;transform:translate(-50%,0)}
+
+/* ============================================================
+   9. ZAČASNO: enotna pisava 17 px
+   Dodano 21. 8. 2026, ker je bilo na telefonu premajhno.
+   Zajema samo tisto, kar je bilo manjše od 17 px.
+   Izjeme po dogovoru: številka dneva (21 px), kolesje za uro,
+   številke v letnem prikazu (9 px), veliki datum na dnevnem listu.
+   Blok je namenoma na koncu in v enem kosu, da ga sklop 13 (dizajn)
+   zbriše z enim potegom in velikosti določi pravilno.
+   ============================================================ */
+.note-date,.note-wait,.ura-btn,.ura-btn small,.chk,.cell .cnt,.dayline .dw,
+.dname,.dow span,.cal-dow span,.week-head,.group-title,.oznaka,.mini h4,
+.cell,.cal-day,.seg button,.opt,.opt .when,.note-text,.add-btn,.sheet-back,
+.empty,.dayline button,#ctxTitle .sub,.opozorilo,.modal .lead,.day-hero .small,
+#btnToday,#btnAll{font-size:17px}
+/* Balonček v mesečni celici mora zrasti, sicer številka pri 17 px ne gre vanj.
+   Izmerjeno 21. 8. 2026: v škatlici 17 pik besedilo potrebuje 21. */
+.cell .cnt{min-width:24px;height:24px;padding:0 5px}
+
+/* ============================================================
+   10. PREHOD POGLEDA – zapisek odpotuje na dno
+   Brskalnik posname staro in novo sliko seznama in med njima
+   potuje sam. Kdor tega ne zna, prerisuje kot doslej.
+   Če ima telefon vklopljeno "manj gibanja", animacije ni.
+   ============================================================ */
+@media (prefers-reduced-motion: no-preference){
+  ::view-transition-group(*){
+    animation-duration:.30s;
+    animation-timing-function:cubic-bezier(.32,.72,0,1);
+  }
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header id="topbar">
+    <div id="ctxTitle"></div>
+    <button id="btnToday">Danes</button>
+  </header>
+
+  <main id="feed"></main>
+
+  <footer id="bottombar">
+    <div class="seg" id="seg">
+      <!-- skrita oznaka data-view se NE sme spreminjati: po njej aplikacija ve, kateri pogled naj pokaže -->
+      <button data-view="teden" class="on">Ted</button>
+      <button data-view="mesec">Mes</button>
+      <button data-view="leto">Let</button>
+    </div>
+    <button id="btnAll">Vse</button>
+  </footer>
+</div>
+
+<!-- DNEVNI POGLED -->
+<section class="sheet" id="daySheet">
+  <div class="sheet-top">
+    <button class="sheet-back" id="dayBack">‹ Nazaj</button>
+    <div class="sheet-title" id="dayTitle"></div>
+  </div>
+  <div class="sheet-body" id="dayBody"></div>
+</section>
+
+<!-- OKENCE: PREMIK NALOGE NA IZBRAN DATUM -->
+<div class="modal" id="moveModal">
+  <div class="modal-bg" data-close="1"></div>
+  <div class="modal-card">
+    <div class="grip"></div>
+    <!-- korak 1: izbira dneva -->
+    <div id="moveStep1">
+      <div class="premik-glava">
+        <span class="premik-ikona" aria-label="Premakni"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a7 7 0 0 1 7-7h7"/><path d="M15 4l5 4-5 4"/></svg></span>
+      </div>
+      <div class="dow-premik"><span>pon</span><span>tor</span><span>sre</span><span>čet</span><span>pet</span><span>sob</span><span>ned</span></div>
+      <div class="dayline" id="moveDays"></div>
+
+      <button class="opt sredinsko" id="odpriKoledar">
+        <span class="ikona-levo"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span><span>Drug datum</span>
+      </button>
+
+      <button class="opt reset sredinsko" id="btnReset" hidden>↺ Prvotni/Današnji dan</button>
+      <button class="opt cancel" data-close="1">Prekliči</button>
+    </div>
+
+    <!-- korak 3: koledar (lastna komponenta, ne sistemska) -->
+    <div id="moveStep3" hidden>
+      <div id="moveCalHost"></div>
+      <button class="opt cancel cal-nazaj" id="moveCalNazaj">‹ Nazaj</button>
+    </div>
+
+    <!-- korak 2: kaj z uro, preden se premik izvede -->
+    <div id="moveStep2" hidden>
+      <p class="lead sredina" id="moveLead2"></p>
+      <div class="oznaka sredina" id="uroOznaka">Uro</div>
+      <button class="opt sredinsko" id="uroIzbrisem">Izbrišem</button>
+      <button class="opt sredinsko" id="uroObdrzim">Obdržim</button>
+      <button class="opt sredinsko" id="uroSpremeniOdpri">
+        <span class="ikona-levo"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span>Spremenim</span>
+      </button>
+      <button class="opt cancel" data-close="1">Prekliči</button>
+    </div>
+  </div>
+</div>
+
+<!-- OKENCE: URA ZAPISKA -->
+<div class="modal" id="uraModal">
+  <div class="modal-bg" data-close="1"></div>
+  <div class="modal-card">
+    <div class="grip"></div>
+
+    <!-- korak 1: kolesje -->
+    <div id="uraStep1">
+      <p class="opozorilo" id="uraOpozorilo" hidden></p>
+
+      <div class="kolo" id="kolo">
+        <div class="kolo-pas"></div>
+        <div class="kolo-stolpec" id="koloH"></div>
+        <div class="kolo-dvopicje">:</div>
+        <div class="kolo-stolpec" id="koloM"></div>
+      </div>
+
+      <button class="opt potrdi" id="uraPotrdi">Potrdi</button>
+      <button class="opt reset sredinsko" id="uraOdstrani" hidden>Odstrani uro</button>
+      <button class="opt cancel" data-close="1">Prekliči</button>
+    </div>
+
+    <!-- korak 2: vprašanje Danes / Jutri -->
+    <div id="uraStep2" hidden>
+      <h3 id="uraVprasanje"></h3>
+      <p class="lead" id="uraLead2"></p>
+      <button class="opt" id="uraDanes"><span>Danes</span><span class="when" id="uraDanesD"></span></button>
+      <button class="opt" id="uraJutri"><span>Jutri</span><span class="when" id="uraJutriD"></span></button>
+      <button class="opt cancel" data-close="1">Prekliči</button>
+    </div>
+
+    <!-- korak 3: obvestilo po kliku na Danes -->
+    <div id="uraStep3" hidden>
+      <h3>Ura je zapisana</h3>
+      <p class="opozorilo mirno">Ta zadeva ne bo podaljševana samodejno.</p>
+      <button class="opt" data-close="1"><span>V redu</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- VSE NALOGE -->
+<section class="sheet" id="allSheet">
+  <div class="sheet-top">
+    <button class="sheet-back" id="allBack">‹ Nazaj</button>
+    <div class="sheet-title" id="allTitle"></div>
+  </div>
+  <div class="sheet-body" id="allBody"></div>
+</section>
+
+<!-- OBVESTILO PO PREMIKU -->
+<div id="obvestilo" aria-live="polite"></div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   1. SHRANJEVANJE
+   Poskusi localStorage; če ta ni na voljo (npr. predogled v
+   Claudu), pade nazaj na pomnilnik – aplikacija dela naprej,
+   samo da se po zaprtju ne shrani.
+   ============================================================ */
+const Store = (() => {
+  const KEY = "notesnik.v1";
+  let mem = null, ok = true;
+  try { localStorage.setItem("__t","1"); localStorage.removeItem("__t"); }
+  catch(e){ ok = false; }
+  return {
+    load(){
+      if(!ok) return mem ? JSON.parse(JSON.stringify(mem)) : null;
+      try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : null; }
+      catch(e){ return null; }
+    },
+    save(data){
+      if(!ok){ mem = JSON.parse(JSON.stringify(data)); return; }
+      try { localStorage.setItem(KEY, JSON.stringify(data)); } catch(e){}
+    },
+    persistent: ok
+  };
+})();
+
+/* ============================================================
+   2. PODATKOVNI MODEL
+   naloga = { id, text, created, done, doneDate, defer }
+   - created  = datum nastanka alineje (se NIKOLI ne spremeni – to je datum,
+                ki se izpiše ob alineji)
+   - defer    = datum, na katerega je bila naloga ročno premaknjena (ali null)
+   - Kje se naloga prikaže, se izračuna sproti, nič se ne "seli":
+       * opravljena   -> na dan, ko je bila opravljena
+       * neopravljena -> na max(defer ali created, danes)
+         torej: čaka do svojega datuma, potem pa se vsak dan sama
+         prestavlja naprej, dokler je ne označiš ali zbrišeš.
+   ============================================================ */
+const state = {
+  tasks: Store.load()?.tasks || [],
+  view: "teden",
+  openDay: null,
+  pisemo: null          // zapisek, ki ga prav zdaj pisemo (pot A)
+};
+function persist(){ Store.save({ tasks: state.tasks }); }
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ============================================================
+   3. DATUMI
+   ============================================================ */
+const DAN_KRATKO = ["ned","pon","tor","sre","čet","pet","sob"];
+const MES_KRATKO = ["jan","feb","mar","apr","maj","jun","jul","avg","sep","okt","nov","dec"];
+
+const pad = n => String(n).padStart(2,"0");
+const iso = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+function parseISO(s){ const p = s.split("-").map(Number); return new Date(p[0], p[1]-1, p[2]); }
+function addDays(d,n){ const x = new Date(d.getFullYear(),d.getMonth(),d.getDate()); x.setDate(x.getDate()+n); return x; }
+function mondayOf(d){ const x = new Date(d.getFullYear(),d.getMonth(),d.getDate());
+  const w = (x.getDay()+6)%7; x.setDate(x.getDate()-w); return x; }
+function sameYMD(a,b){ return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
+function today(){ return new Date(); }
+function todayISO(){ return iso(new Date()); }
+
+/** ISO številka tedna */
+function weekNumber(d){
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay()||7));
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(),0,1));
+  return Math.ceil(((t - y0)/86400000 + 1)/7);
+}
+/** Slovenska sklanjatev po številu: [1, 2, 3–4, 5+] */
+function sklon(n, oblike){
+  const r = n % 100;
+  if(r===1) return oblike[0];
+  if(r===2) return oblike[1];
+  if(r===3 || r===4) return oblike[2];
+  return oblike[3];
+}
+/* Naslov skupine na strani »Vse«: število in pravilna oblika pridevnika
+   (1 odprta, 2 odprti, 3 odprte, 5 odprtih). Odločeno 30. 8. 2026. */
+const odprteNaslov = n => n+" "+sklon(n, ["odprta","odprti","odprte","odprtih"]);
+const opravljeneBeseda = n => n+" "+sklon(n, ["opravljena","opravljeni","opravljene","opravljenih"]);
+/* Ime meseca je povsod kratica brez pike: 19. avg (dogovor 21. 8. 2026). */
+function kratekDatum(isoStr){ const d = parseISO(isoStr); return d.getDate()+". "+MES_KRATKO[d.getMonth()]; }
+
+/* ============================================================
+   4. RAZPOREJANJE NALOG PO DNEH
+   ============================================================ */
+/* ---------- URA ----------
+   ura              = "01:00" ali null
+   uraNaslednjiDan  = ali ura pade čez polnoč (koncert ob 01.00 zvečer 16. 8.)
+   pripet           = naloga se ne prestavlja več (klik na "Danes")
+   Trenutek se NE shrani, ampak izračuna iz dneva seznama. Zato se ura
+   sama preseli z nalogo, kadar se naloga prestavi naprej. */
+const NOCNO_OKNO_DO = "04:00";     // pozneje nastavljivo; do te ure velja vprašanje Danes/Jutri
+
+/** Ali za to uro velja vprašanje Danes / Jutri? */
+function jeNocnaUra(u){ return !!u && u >= "00:00" && u <= NOCNO_OKNO_DO; }
+
+/** Koliko minut od začetka dneva seznama – za razvrščanje. */
+function minutaVDnevu(t){
+  if(!t.ura) return -1;
+  const p = t.ura.split(":");
+  return (t.uraNaslednjiDan ? 1440 : 0) + Number(p[0])*60 + Number(p[1]);
+}
+/** Pravi koledarski datum ure (lahko je naslednji dan). */
+function datumUre(t, danISO){
+  return t.uraNaslednjiDan ? iso(addDays(parseISO(danISO), 1)) : danISO;
+}
+/** Ali je ta ura na tem dnevu že mimo? */
+function uraJeMimo(danISO, ura, naslednjiDan){
+  const d = naslednjiDan ? iso(addDays(parseISO(danISO), 1)) : danISO;
+  const z = new Date();
+  return (d+"T"+ura) < (iso(z)+"T"+pad(z.getHours())+":"+pad(z.getMinutes()));
+}
+
+/** Na kateri dan "živi" naloga danes? (string primerjava dela za YYYY-MM-DD) */
+function placementOf(t, tISO){
+  if(t.done) return t.doneDate || t.created;
+  const sidro = t.defer || t.created;           // ročni premik prevlada nad datumom nastanka
+  if(t.pripet) return sidro;                    // pripeta naloga obtiči in se ne prestavlja
+  return sidro > tISO ? sidro : tISO;
+}
+/** Map: "YYYY-MM-DD" -> {open, done, tasks:[]} */
+function buildIndex(){
+  const tISO = todayISO(), map = new Map();
+  for(const t of state.tasks){
+    const key = placementOf(t, tISO);
+    let e = map.get(key);
+    if(!e){ e = {open:0, done:0, tasks:[]}; map.set(key, e); }
+    if(t.done) e.done++; else e.open++;
+    e.tasks.push(t);
+  }
+  for(const e of map.values()){
+    /* Vrstni red na dnevu:
+       1. neopravljene z uro   – po uri, od najzgodnejše
+       2. neopravljene brez ure – po datumu nastanka
+       3. opravljene            – čisto na dnu */
+    e.tasks.sort((a,b)=>{
+      if(a.done !== b.done) return a.done ? 1 : -1;
+      const au = !!a.ura, bu = !!b.ura;
+      if(au !== bu) return au ? -1 : 1;
+      if(au && bu){
+        const r = minutaVDnevu(a) - minutaVDnevu(b);
+        if(r) return r;
+      }
+      return a.created.localeCompare(b.created) || a.id.localeCompare(b.id);
+    });
+  }
+  return map;
+}
+let INDEX = buildIndex();
+function refreshIndex(){ INDEX = buildIndex(); }
+
+/* ============================================================
+   5. NESKONČNI SEZNAM (skupen za vse tri poglede)
+   Enota = teden / mesec / leto. Indeks 0 = enota, v kateri je danes.
+   ============================================================ */
+const feedEl = document.getElementById("feed");
+const ctxTitle = document.getElementById("ctxTitle");
+/* leto: 4 namesto 1. Po sklopu 3 je letni blok visok samo ~200 px,
+   zato tri leta ne napolnijo zaslona in tekočega leta ni mogoče
+   pripeljati na vrh. Izmerjeno 30. 8. 2026. */
+const AHEAD = {teden:8, mesec:3, leto:4};
+const STEP  = {teden:6, mesec:3, leto:1};
+const MAXU  = {teden:160, mesec:60, leto:12};
+
+const feed = { first:0, last:0, busy:false };
+
+/* -- pretvorbe indeks <-> datum -------------------------------- */
+function unitStartDate(view, i){
+  const now = today();
+  if(view==="teden") return addDays(mondayOf(now), i*7);
+  if(view==="mesec") return new Date(now.getFullYear(), now.getMonth()+i, 1);
+  return new Date(now.getFullYear()+i, 0, 1);
+}
+function unitEndDate(view, i){
+  const now = today();
+  if(view==="teden") return addDays(mondayOf(now), i*7+6);
+  if(view==="mesec") return new Date(now.getFullYear(), now.getMonth()+i+1, 0);
+  return new Date(now.getFullYear()+i, 11, 31);
+}
+
+/* -- risanje ene enote ----------------------------------------- */
+function renderUnit(view, i){
+  if(view==="teden") return renderWeek(i);
+  if(view==="mesec") return renderMonth(i);
+  return renderYear(i);
+}
+
+function renderWeek(i){
+  const start = unitStartDate("teden", i);
+  const end   = addDays(start, 6);
+  const wrap = document.createElement("section");
+  wrap.className = "week-block"; wrap.dataset.unit = i;
+
+  const h = document.createElement("div");
+  h.className = "week-head";
+  const rng = start.getMonth()===end.getMonth()
+    ? start.getDate()+".–"+end.getDate()+". "+MES_KRATKO[end.getMonth()]
+    : start.getDate()+". "+MES_KRATKO[start.getMonth()]+" – "+end.getDate()+". "+MES_KRATKO[end.getMonth()];
+  // Številka tedna je odstranjena 21. 8. 2026; ostane samo razpon datumov.
+  h.innerHTML = '<span class="range">'+rng+'</span>';
+  wrap.appendChild(h);
+
+  const list = document.createElement("div");
+  list.className = "days";
+  const tISO = todayISO();
+  for(let k=0;k<7;k++){
+    const d = addDays(start,k), key = iso(d), e = INDEX.get(key);
+    const open = e ? e.open : 0, done = e ? e.done : 0;
+
+    const row = document.createElement("button");
+    row.className = "day-row" + (key===tISO ? " is-today":"") + ((d.getDay()===0||d.getDay()===6) ? " is-weekend":"");
+    row.dataset.date = key;
+
+    /* Dva števca, oba levo: obroček z odprtimi, kljukica z opravljenimi.
+       Kadar je odprtih nič, obročka sploh ni; kadar ni ničesar, je
+       vrstica prazna. Besedila zapiska tu namenoma ni več. */
+    const stevci =
+      (open ? '<span class="stevec"><i class="obrocek"></i>'+open+'</span>' : '') +
+      (done ? '<span class="stevec opravljene">✓ '+done+'</span>' : '');
+
+    row.innerHTML =
+      '<span class="day-date"><span class="dnum">'+d.getDate()+'</span>'+
+      '<span class="dname">'+DAN_KRATKO[d.getDay()]+'</span></span>'+
+      '<span class="day-body">'+
+        (stevci ? '<span class="stevci">'+stevci+'</span>' : '')+
+      '</span>'+
+      '<span class="day-chevron">›</span>';
+    list.appendChild(row);
+  }
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function renderMonth(i){
+  const first = unitStartDate("mesec", i);
+  const y = first.getFullYear(), m = first.getMonth();
+  const wrap = document.createElement("section");
+  wrap.className = "month-block"; wrap.dataset.unit = i;
+
+  const h = document.createElement("div");
+  h.className = "month-head";
+  h.textContent = MES_KRATKO[m]+" "+y;
+  wrap.appendChild(h);
+
+  const dow = document.createElement("div");
+  dow.className = "dow";
+  /* Ena sama črka namesto kratice: P T S Č P S N. (30. 8. 2026.) */
+  dow.innerHTML = ["p","t","s","č","p","s","n"].map(s=>"<span>"+s+"</span>").join("");
+  wrap.appendChild(dow);
+
+  const g = document.createElement("div");
+  g.className = "grid";
+  const lead = (new Date(y,m,1).getDay()+6)%7;
+  const dim  = new Date(y,m+1,0).getDate();
+  const tISO = todayISO();
+
+  for(let k=0;k<lead;k++){ const c=document.createElement("div"); c.className="cell pad"; g.appendChild(c); }
+  for(let dnum=1; dnum<=dim; dnum++){
+    const key = y+"-"+pad(m+1)+"-"+pad(dnum), e = INDEX.get(key);
+    const open = e ? e.open : 0, done = e ? e.done : 0;
+    const c = document.createElement("button");
+    c.className = "cell" + (key===tISO ? " is-today":"");
+    c.dataset.date = key;
+    c.innerHTML = '<span>'+dnum+'</span>' +
+      (open>0 ? '<span class="cnt">'+open+'</span>'
+              : (done>0 ? '<span class="dot"></span>' : '<span class="dot" style="opacity:0"></span>'));
+    g.appendChild(c);
+  }
+  wrap.appendChild(g);
+  return wrap;
+}
+
+/* Letni prikaz (sklop 3, točka 29, 30. 8. 2026).
+   Šest mesecev v vrsto, dvanajst mesecev je torej v dveh vrsticah.
+   Vsak mesec je gumb: klik odpre ta mesec v mesečnem prikazu. */
+function renderYear(i){
+  const y = unitStartDate("leto", i).getFullYear();
+  const wrap = document.createElement("section");
+  wrap.className = "year-block"; wrap.dataset.unit = i;
+
+  const h = document.createElement("div");
+  h.className = "year-head"; h.textContent = y;
+  wrap.appendChild(h);
+
+  // Koliko odprtih nalog leži v posameznem mesecu tega leta.
+  const stevec = new Array(12).fill(0);
+  for(const [kljuc, e] of INDEX){
+    if(kljuc.slice(0,4) !== String(y)) continue;
+    stevec[Number(kljuc.slice(5,7)) - 1] += e.open;
+  }
+
+  const grid = document.createElement("div");
+  grid.className = "year-grid";
+  const zdaj = today(), danesLeto = zdaj.getFullYear(), danesMesec = zdaj.getMonth();
+
+  for(let m=0;m<12;m++){
+    const b = document.createElement("button");
+    b.className = "mini" + (y===danesLeto && m===danesMesec ? " je-danes" : "");
+    b.dataset.mesec = y+"-"+pad(m+1);
+    b.innerHTML = '<h4>'+MES_KRATKO[m]+'</h4>'+
+                  '<span class="mcnt'+(stevec[m] ? "" : " prazno")+'">'+(stevec[m] || 0)+'</span>';
+    grid.appendChild(b);
+  }
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+/* -- gradnja / širjenje seznama -------------------------------- */
+/* sredisce = katera enota naj bo na vrhu. Brez njega je to enota 0,
+   torej tekoči teden, mesec ali leto - vsi dosedanji klici delajo enako.
+   Podatek rabi klik na mesec v letnem prikazu. (Sklop 3, točka 29.) */
+function buildFeed(sredisce){
+  const c = sredisce || 0;
+  feedEl.innerHTML = "";
+  const a = AHEAD[state.view];
+  feed.first = c-a; feed.last = c+a;
+  for(let i=feed.first;i<=feed.last;i++) feedEl.appendChild(renderUnit(state.view, i));
+  scrollToUnit(c);
+  updateCtx();
+}
+function unitEl(i){ return feedEl.querySelector('[data-unit="'+i+'"]'); }
+function scrollToUnit(i){
+  const el = unitEl(i);
+  if(el) feedEl.scrollTop = el.offsetTop - 2;
+}
+function extendDown(){
+  if(feed.busy || (feed.last - feed.first) >= MAXU[state.view]) return;
+  feed.busy = true;
+  const n = STEP[state.view], frag = document.createDocumentFragment();
+  for(let k=0;k<n;k++) frag.appendChild(renderUnit(state.view, ++feed.last));
+  feedEl.appendChild(frag);
+  feed.busy = false;
+}
+function extendUp(){
+  if(feed.busy || (feed.last - feed.first) >= MAXU[state.view]) return;
+  feed.busy = true;
+  const n = STEP[state.view], before = feedEl.scrollHeight, frag = document.createDocumentFragment();
+  for(let k=0;k<n;k++) frag.appendChild(renderUnit(state.view, --feed.first));
+  // vstavimo v pravilnem vrstnem redu (najstarejši na vrh)
+  const kids = Array.from(frag.children).reverse();
+  kids.forEach(el => feedEl.insertBefore(el, feedEl.firstChild));
+  feedEl.scrollTop += feedEl.scrollHeight - before;   // brez skoka slike
+  feed.busy = false;
+}
+
+/* -- naslov v glavi glede na položaj drsnika -------------------- */
+function currentUnitIndex(){
+  const top = feedEl.scrollTop + 8;
+  let cur = feed.first;
+  for(const el of feedEl.children){
+    if(el.offsetTop <= top) cur = Number(el.dataset.unit); else break;
+  }
+  return cur;
+}
+function updateCtx(){
+  const i = currentUnitIndex();
+  const s = unitStartDate(state.view, i), e = unitEndDate(state.view, i);
+  if(state.view==="teden"){
+    ctxTitle.innerHTML = weekNumber(s)+". teden <span class=\"sub\">"+
+      MES_KRATKO[s.getMonth()]+" "+s.getFullYear()+"</span>";
+  } else if(state.view==="mesec"){
+    ctxTitle.innerHTML = MES_KRATKO[s.getMonth()]+
+      " <span class=\"sub\">"+s.getFullYear()+"</span>";
+  } else {
+    ctxTitle.innerHTML = "Leto <span class=\"sub\">"+s.getFullYear()+"</span>";
+  }
+  feed.ctxRange = [iso(s), iso(e)];
+}
+
+let scrollTick = false;
+feedEl.addEventListener("scroll", () => {
+  if(scrollTick) return;
+  scrollTick = true;
+  requestAnimationFrame(() => {
+    scrollTick = false;
+    /* Dokler je vsebine manj kot zaslon, se drsnik ne more premakniti;
+       takrat dodajanje enot navzgor samo zamakne sliko (izmerjeno
+       30. 8. 2026: popravek scrollTop je bil za 97 px prekratek). */
+    if(feedEl.scrollHeight > feedEl.clientHeight && feedEl.scrollTop < 500) extendUp();
+    else if(feedEl.scrollHeight - feedEl.scrollTop - feedEl.clientHeight < 900) extendDown();
+    updateCtx();
+  });
+}, {passive:true});
+
+/* ============================================================
+   6. DNEVNI POGLED
+   ============================================================ */
+const daySheet = document.getElementById("daySheet");
+const dayBody  = document.getElementById("dayBody");
+const dayTitle = document.getElementById("dayTitle");
+
+/* koledarček s puščico – ikona gumba za premik */
+const IKONA_KOLEDAR =
+  '<svg viewBox="0 0 24 24" aria-hidden="true">'+
+  '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>'+
+  '<path d="M10 15h5m0 0-2-2m2 2-2 2"/></svg>';
+
+function openDay(key){
+  state.openDay = key;
+  aktivniSeznam = "dan";
+  const d = parseISO(key);
+  dayTitle.textContent = d.getDate()+". "+MES_KRATKO[d.getMonth()]+" "+d.getFullYear();
+  renderDay();
+  daySheet.classList.add("open");
+}
+function closeDay(){
+  daySheet.classList.remove("open");
+  state.openDay = null;
+  konecPisanja();
+  aktivniSeznam = "dan";
+  refreshIndex();
+  refreshVisible();
+}
+/* ---------- ENA SAMA VRSTICA ZAPISKA ----------
+   Isti zapisek izgleda in se ureja popolnoma enako, ne glede na to,
+   ali pridete vanj iz dneva ali iz "Vse naloge". Zato je koda ena
+   sama in se popravlja na enem mestu.
+   zPrehodom = ali naj vrstica dobi ime za prehod pogleda. To sme biti
+   samo na enem seznamu naenkrat, sicer se imena podvojijo in brskalnik
+   prehod opusti. Dnevni list ga ima, "Vse naloge" ne. */
+function vrsticaZapiska(t, zPrehodom){
+  const tISO = todayISO();
+  const dan  = danZapiska(t);
+  const carried = !t.done && !t.defer && t.created < dan;   // prenesena iz prejšnjih dni
+  /* Puščica pove, da ste zapisek premaknili VI. Pri nočni uri ga je
+     premaknilo pravilo (gumb "Jutri"), ne vi – zato tam puščice ni.
+     Dogovorjeno 22. 8. 2026. */
+  const waiting = !t.done && t.defer && t.defer > tISO && !t.nocniPremik;
+  return '<div class="note'+(t.done?" done":"")+(carried?" carried":"")+'" data-id="'+t.id+'"'+
+    (zPrehodom ? ' style="view-transition-name:z-'+t.id+'"' : '')+'>'+
+    '<div class="note-main">'+
+      '<span class="note-date" data-act="odpriDan">'+kratekDatum(t.created)+'</span>'+
+      '<button class="chk" data-act="toggle">✓</button>'+
+      (waiting ? '<span class="note-wait" data-act="odpriDan" title="Premaknjeno"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a7 7 0 0 1 7-7h7"/><path d="M15 4l5 4-5 4"/></svg></span>' : '')+
+      '<div class="note-line">'+
+        uraGumb(t, dan)+
+        '<div class="note-text" contenteditable="true" data-act="edit">'+escapeHTML(t.text)+'</div>'+
+      '</div>'+
+    '</div>'+
+    (t.done ? '' : '<button class="note-move" data-act="move" title="Premakni">'+IKONA_KOLEDAR+'</button>')+
+    '<button class="note-del" data-act="del">×</button>'+
+  '</div>';
+}
+
+/* Dan, na katerem zapisek trenutno leži. Isti izračun velja za dnevni
+   list in za "Vse naloge", zato okencema za uro in premik ni treba
+   vedeti, s katerega seznama sta bila odprta. */
+function danZapiska(t){ return placementOf(t, todayISO()); }
+
+function renderDay(focusId){
+  const key = state.openDay, d = parseISO(key), tISO = todayISO();
+  const e = INDEX.get(key);
+  const tasks = e ? e.tasks : [];
+
+  // Vrstica pod glavo je odstranjena 21. 8. 2026; datum je v glavi lista.
+  let html = "";
+
+  if(tasks.length){
+    html += '<div class="notes">';
+    for(const t of tasks) html += vrsticaZapiska(t, true);
+    html += '</div>';
+  } else {
+    html += '<div class="empty">Ni zapiskov za ta dan.</div>';
+  }
+  const minuloDan = key < tISO;
+  html += '<button class="add-btn" id="addNote"'+(minuloDan ? " disabled" : "")+
+          '>+ &nbsp;Nov zapisek</button>';
+  dayBody.innerHTML = html;
+
+  if(focusId){
+    const el = dayBody.querySelector('[data-id="'+focusId+'"] .note-text');
+    if(el){ el.focus(); placeCaretEnd(el); pripeljiVVidno(el); }
+  }
+}
+
+/* Kateri seznam je odprt: dnevni list ali "Vse naloge".
+   Od tega je odvisno samo, kaj se prerisuje – urejanje je enako. */
+let aktivniSeznam = "dan";
+function telesoSeznama(){ return aktivniSeznam === "vse" ? allBody : dayBody; }
+
+/* Prerisovanje odprtega seznama.
+   zAnimacijo = zapisek res zamenja mesto. Takrat prerisovanje ovijemo
+   v prehod pogleda in zapisek vidno odpotuje. Kadar se ne premakne
+   nikamor, prerišemo naravnost – brez animacije, brez utripa. */
+function prerisiSeznam(zAnimacijo){
+  const risi = () => { if(aktivniSeznam === "vse") openAll(); else renderDay(); };
+  if(zAnimacijo && document.startViewTransition &&
+     !matchMedia("(prefers-reduced-motion: reduce)").matches){
+    document.startViewTransition(risi);
+  } else {
+    risi();
+  }
+}
+
+/* Vrstni red zapiskov na dnevu, kjer zapisek leži – za primerjavo pred in po. */
+function vrstniRedDneva(){
+  const dan = aktivniSeznam === "vse" ? null : state.openDay;
+  const e = dan ? INDEX.get(dan) : null;
+  return e ? e.tasks.map(x => x.id) : [];
+}
+/* Ura na začetku besedila. Kadar ure ni, na istem mestu stoji bleda urica.
+   Oboje je isti gumb – zato sta dodajanje in spreminjanje na istem mestu. */
+const IKONA_URA =
+  '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/>'+
+  '<path d="M12 7v5l3 2"/></svg>';
+
+function uraGumb(t, danISO){
+  if(!t.ura){
+    if(t.done) return "";                       // odkljukani nalogi se ure ne da dodati
+    return '<button class="ura-btn prazna" data-act="ura" title="Dodaj uro">'+IKONA_URA+'</button>';
+  }
+  const cezPolnoc = t.uraNaslednjiDan
+    ? '<small>'+kratekDatum(datumUre(t, danISO))+'</small>' : '';
+  return '<button class="ura-btn" data-act="ura">'+t.ura.replace(":",".")+cezPolnoc+'</button>';
+}
+
+function placeCaretEnd(el){
+  const r = document.createRange(); r.selectNodeContents(el); r.collapse(false);
+  const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+
+/* ---------- SKUPNO ROKOVANJE ZA OBA SEZNAMA ----------
+   Kljukica, ura, premik, brisanje in pisanje delajo enako v dnevnem
+   listu in v "Vse naloge". Razlika je samo v dveh stvareh:
+   – gumb "Nov zapisek" je le v dnevnem listu,
+   – v "Vse naloge" klik na datum odpre dan, na katerem zapisek leži. */
+function klikVZapisku(ev){
+  const note = ev.target.closest(".note"); if(!note) return;
+  const act = ev.target.closest("[data-act]")?.dataset.act;
+  const t = state.tasks.find(x => x.id === note.dataset.id); if(!t) return;
+
+  if(act === "toggle"){
+    const prej = vrstniRedDneva().indexOf(t.id);
+    /* Dan moramo prebrati PREJ, ko je zapisek še neopravljen. Potem
+       ga izračun ne najde več tam, kjer leži, ampak na dnevu nastanka. */
+    const dan = danZapiska(t);
+    t.done = !t.done;
+    t.doneDate = t.done ? dan : null;
+    persist(); refreshIndex();
+    // animiramo samo, kadar zapisek res zamenja mesto
+    prerisiSeznam(vrstniRedDneva().indexOf(t.id) !== prej);
+  } else if(act === "ura"){
+    if(!t.done) openUra(t.id);
+  } else if(act === "move"){
+    openMove(t.id);
+  } else if(act === "del"){
+    state.tasks = state.tasks.filter(x => x.id !== t.id);
+    persist(); refreshIndex(); prerisiSeznam(false);
+  } else if(act === "odpriDan" && aktivniSeznam === "vse"){
+    const kam = danZapiska(t);
+    allSheet.classList.remove("open"); aktivniSeznam = "dan";
+    openDay(kam);
+  }
+}
+function pisanjeVZapisku(ev){
+  const el = ev.target.closest(".note-text"); if(!el) return;
+  const t = state.tasks.find(x => x.id === el.closest(".note").dataset.id); if(!t) return;
+  t.text = el.textContent.trim();
+  persist();                       // brez prerisovanja, da kazalec ne skoči
+}
+function enterVZapisku(ev){
+  if(ev.key === "Enter" && ev.target.closest(".note-text")){
+    ev.preventDefault(); ev.target.blur();
+  }
+}
+
+dayBody.addEventListener("click", ev => {
+  if(ev.target.closest("#addNote")){
+    /* Varovalka: v pretekli dan se ne piše. Gumb je tam ugasnjen, ta vrstica
+       pa poskrbi, da se zapisek ne ustvari niti, če klik pride po drugi poti. */
+    if(state.openDay < todayISO()) return;
+    const t = { id:uid(), text:"", created:state.openDay, done:false, doneDate:null, defer:null };
+    state.tasks.push(t); zacniPisanje(t.id);
+    persist(); refreshIndex(); renderDay(t.id);
+    return;
+  }
+  klikVZapisku(ev);
+});
+/* Med pisanjem novega zapiska odkljukane skrijemo. Brez tega ostanejo
+   pod njim in motijo, seznam pa se ne more zdrsniti dovolj daleč.
+   Ko pisanje končate, se spet pokažejo – brez prerisovanja, zato nič
+   ne poskoči. */
+function zacniPisanje(id){
+  state.pisemo = id;
+  dayBody.classList.add("pisemo");
+}
+function konecPisanja(ev){
+  if(ev && !ev.target.closest(".note-text")) return;
+  state.pisemo = null;
+  dayBody.classList.remove("pisemo");
+}
+dayBody.addEventListener("focusout", konecPisanja);
+dayBody.addEventListener("input", pisanjeVZapisku);
+dayBody.addEventListener("keydown", enterVZapisku);
+
+/* Vračalka na čisto začetku besedila pobriše celo uro naenkrat.
+   Uporabljamo beforeinput, ker se navadni keydown za vračalko na
+   telefonih ne javi zanesljivo. Gumb "Odstrani uro" je varovalka. */
+function kazalecNaZacetku(el){
+  const s = window.getSelection();
+  if(!s || !s.isCollapsed || s.rangeCount === 0) return false;
+  const r = s.getRangeAt(0).cloneRange();
+  r.selectNodeContents(el);
+  r.setEnd(s.getRangeAt(0).startContainer, s.getRangeAt(0).startOffset);
+  return r.toString().length === 0;
+}
+function poskusiOdstranitiUro(el, ev){
+  const t = state.tasks.find(x => x.id === el.closest(".note").dataset.id);
+  if(!t || !t.ura || !kazalecNaZacetku(el)) return false;
+  ev.preventDefault();
+  odstraniUro(t);
+  prerisiSeznam(false);
+  // kazalec vrnemo na začetek besedila, da lahko takoj tipkate naprej
+  const nov = telesoSeznama().querySelector('[data-id="'+t.id+'"] .note-text');
+  if(nov){ nov.focus();
+    const r = document.createRange(); r.selectNodeContents(nov); r.collapse(true);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  }
+  return true;
+}
+function vracalkaVZapisku(ev){
+  if(ev.key !== "Backspace") return;
+  const el = ev.target.closest(".note-text"); if(!el) return;
+  poskusiOdstranitiUro(el, ev);
+}
+function vracalkaPredVnosom(ev){
+  if(ev.inputType !== "deleteContentBackward") return;
+  const el = ev.target.closest(".note-text"); if(!el) return;
+  poskusiOdstranitiUro(el, ev);
+}
+dayBody.addEventListener("keydown", vracalkaVZapisku);
+dayBody.addEventListener("beforeinput", vracalkaPredVnosom);
+function odstraniUro(t){
+  /* Z uro odpade tudi razlog, zaradi katerega puščice ni bilo. */
+  t.ura = null; t.uraNaslednjiDan = false; t.pripet = false; t.nocniPremik = false;
+  persist(); refreshIndex();
+}
+
+document.getElementById("dayBack").addEventListener("click", closeDay);
+
+/* ============================================================
+   6c. OKENCE ZA URO
+   Korak 1 kolesje · korak 2 vprašanje Danes/Jutri · korak 3 obvestilo.
+   Vse v enem okencu, ki menja vsebino – nobeno okence se ne odpre
+   nad drugim.
+   ============================================================ */
+const uraModal = document.getElementById("uraModal");
+const uraSteps = [1,2,3].map(n => document.getElementById("uraStep"+n));
+const koloH = document.getElementById("koloH");
+const koloM = document.getElementById("koloM");
+let uraId = null;
+let premikCaka = null;   // dan, na katerega naj se premakne po potrditvi ure
+let uraIzbrana = null;   // zapomnjena ura – skrito kolesje se zavrti nazaj na 0
+
+function uraKorak(n){ uraSteps.forEach((el,i)=> el.hidden = (i+1 !== n)); }
+
+/* ---------- lastno kolesje ----------
+   Dva stolpca. Ure 0–23, minute po 5. Vrstica je visoka 44 slikovnih
+   pik; izbrana je tista, ki obstoji na sredini. */
+const VRSTICA = 44;
+const URE    = Array.from({length:24}, (_,i)=> pad(i));
+const MINUTE = Array.from({length:12}, (_,i)=> pad(i*5));
+
+function napolniKolo(){
+  koloH.innerHTML = URE.map(u=>'<b>'+u+'</b>').join("");
+  koloM.innerHTML = MINUTE.map(m=>'<b>'+m+'</b>').join("");
+}
+/** Kje naj se kolesje odpre, kadar naloga ure še nima.
+    Ponujena ura ne sme biti nikoli pretekla, zato se zaokroži NAVZGOR
+    na prvo petico, ki jo kolesje pozna: ob 15.47 je to 15.50, ob 15.44
+    pa 15.45. Prej je bilo tu Math.round, zato je ob 15.47 ponudilo
+    15.45 in potrditev zavrnilo z opozorilom "Ura je pretekla".
+    (Sklop 3, točka 31, 30. 8. 2026.) */
+function privzetaUra(){
+  if(uraDan() !== todayISO()) return "12:00";
+  const z = new Date();
+  let h = z.getHours(), m = (Math.floor(z.getMinutes()/5) + 1) * 5;
+  if(m >= 60){ m = 0; h = (h+1) % 24; }
+  return pad(h)+":"+pad(m);
+}
+function nastaviKolo(ura){
+  const [h,m] = (ura || "12:00").split(":").map(Number);
+  koloH.scrollTop = h * VRSTICA;
+  koloM.scrollTop = Math.round(m/5) * VRSTICA;
+  oznaciKolo();
+}
+function beriKolo(){
+  const h = Math.round(koloH.scrollTop / VRSTICA);
+  const m = Math.round(koloM.scrollTop / VRSTICA);
+  return pad(Math.min(h,23)) + ":" + MINUTE[Math.min(m, MINUTE.length-1)];
+}
+function oznaciKolo(){
+  [[koloH,URE],[koloM,MINUTE]].forEach(([el])=>{
+    const i = Math.round(el.scrollTop / VRSTICA);
+    Array.from(el.children).forEach((b,k)=> b.classList.toggle("on", k===i));
+  });
+}
+[koloH, koloM].forEach(el => el.addEventListener("scroll", () => {
+  if(el.__t) cancelAnimationFrame(el.__t);
+  el.__t = requestAnimationFrame(oznaciKolo);
+}, {passive:true}));
+/* dotik na vrstico jo pripelje na sredino */
+[koloH, koloM].forEach(el => el.addEventListener("click", ev => {
+  const b = ev.target.closest("b"); if(!b) return;
+  el.scrollTo({ top: Array.prototype.indexOf.call(el.children, b)*VRSTICA, behavior:"smooth" });
+}));
+
+function openUra(id){
+  uraId = id;
+  const t = state.tasks.find(x => x.id === id); if(!t) return;
+  const naslov = t.text ? "»"+t.text+"«" : "(prazen zapisek)";
+  document.getElementById("uraLead2").textContent = naslov;
+  document.getElementById("uraOpozorilo").hidden  = true;
+  document.getElementById("uraOdstrani").hidden   = !t.ura;
+  napolniKolo();
+  uraKorak(1);
+  uraModal.classList.add("open");
+  requestAnimationFrame(()=> nastaviKolo(t.ura || privzetaUra()));  // šele ko je okence vidno
+}
+/** Dan, na katerega se ura nanaša: ob čakajočem premiku je to ciljni dan. */
+function uraDan(){
+  if(premikCaka) return premikCaka;
+  const t = state.tasks.find(x => x.id === uraId);
+  return t ? danZapiska(t) : state.openDay;
+}
+
+/* izvedi = ali naj se premik, ki je čakal na uro, res izvede.
+   Preklic v kolesju premika NE izvede – vrne se v meni Izbrišem /
+   Obdržim / Spremenim, tako kot je dogovorjeno.
+   (Popravek 21. 8. 2026: prej je preklic premik vseeno izvedel.) */
+function closeUra(izvedi){
+  const id = uraId, d = premikCaka;
+  uraModal.classList.remove("open"); uraId = null; premikCaka = null;
+  if(!d) return;                              // ni bilo čakajočega premika
+  if(izvedi){ moveId = id; applyMove(d); }
+  else      { nazajVMeniZaUro(id, d); }
+}
+
+/** Uro zapiše. naslednjiDan = ali pade čez polnoč. */
+function zapisiUro(t, ura, naslednjiDan, pripet){
+  t.ura = ura;
+  t.uraNaslednjiDan = !!naslednjiDan;
+  if(pripet){ t.pripet = true; t.defer = uraDan(); }
+  persist(); refreshIndex(); prerisiSeznam(false); refreshVisible();
+}
+
+uraModal.addEventListener("click", ev => {
+  if(ev.target.closest("[data-close]")){ closeUra(false); return; }
+  const t = state.tasks.find(x => x.id === uraId); if(!t) return;
+
+  if(ev.target.closest("#uraOdstrani")){
+    // brisanje ure je isto kot "Izbrišem" v meniju – premik se izvede
+    odstraniUro(t); prerisiSeznam(false); refreshVisible(); closeUra(true); return;
+  }
+
+  if(ev.target.closest("#uraPotrdi")){
+    const ura = uraIzbrana = beriKolo();
+    // nočna ura: vprašamo, kateremu dnevu pripada
+    if(jeNocnaUra(ura)){
+      const dan = parseISO(uraDan()), jutri = addDays(dan, 1);
+      document.getElementById("uraVprasanje").textContent = "Dodam danes po 23.55, jutri po 00.00?";
+      document.getElementById("uraDanesD").textContent = kratekDatum(iso(dan));
+      document.getElementById("uraJutriD").textContent = kratekDatum(iso(jutri));
+      uraKorak(2);
+      return;
+    }
+    if(uraJeMimo(uraDan(), ura, false)){
+      const o = document.getElementById("uraOpozorilo");
+      o.textContent = "Ura je pretekla"; o.hidden = false;
+      return;
+    }
+    zapisiUro(t, ura, false, false);
+    closeUra(true);
+    return;
+  }
+
+  if(ev.target.closest("#uraDanes")){
+    zapisiUro(t, uraIzbrana, true, true);   // ura pripada večeru tega dne
+    /* Dan je s tem že določen (zapisiUro je vpisal defer in pripet).
+       Če bi premik ostal čakati, bi ga zaključni gumb "V redu" izvedel
+       še enkrat in pri tem pobrisal pripetost.
+       (Popravek 21. 8. 2026.) */
+    premikCaka = null;
+    uraKorak(3);
+    return;
+  }
+  if(ev.target.closest("#uraJutri")){
+    t.defer = iso(addDays(parseISO(uraDan()), 1));
+    t.pripet = false;
+    /* Zapiska niste premaknili vi – premaknilo ga je pravilo o nočni uri.
+       Zato pri njem ni puščice. Dogovorjeno 22. 8. 2026. */
+    t.nocniPremik = true;
+    premikCaka = null;                 // dan je s tem že določen
+    zapisiUro(t, uraIzbrana, false, false); // ura pripada naslednjemu dnevu
+    closeUra(true);
+    return;
+  }
+});
+
+/* ============================================================
+   6b. PREMIK NALOGE NA IZBRAN DATUM
+   Naloga dobi polje "defer" = datum, do katerega naj počaka.
+   Ko ta datum mine in naloga še ni opravljena, se spet začne
+   sama prestavljati v današnji dan.
+   ============================================================ */
+const moveModal = document.getElementById("moveModal");
+const moveDays  = document.getElementById("moveDays");
+const btnReset  = document.getElementById("btnReset");
+const moveStep1 = document.getElementById("moveStep1");
+const moveStep2 = document.getElementById("moveStep2");
+const moveStep3 = document.getElementById("moveStep3");
+let moveId = null;
+let ciljniDan = null;     // izbrani dan, ki čaka na odločitev o uri
+
+/* ---------- dva tedna, sedem dni v vrsti ----------
+   Prvo polje je dan, na katerem smo: ni izbirljivo, le označeno.
+   Sledi mu trinajst dni, torej skupaj štirinajst polj v dveh vrstah.
+   Stolpci se NE poravnavajo po dnevih v tednu – prvi stolpec je
+   vedno tekoči dan, ker tako lažje šteješ "čez toliko dni". */
+function risiVrsticoDni(baza){
+  /* Običajen koledar: ponedeljek levo, tri vrstice po sedem polj.
+     Dni je petnajst – dva polna tedna in ponovitev dneva, s katerim se
+     začne izhodiščni dan. Zato je ta dan v tednu trikrat, vsi ostali
+     po dvakrat. Dnevi pred izhodiščnim so posvetljeni, ker vanje ni
+     mogoče pisati; polja za zadnjim dnem ostanejo prazna. */
+  const prviVMrezi = mondayOf(baza);              // ponedeljek tekočega tedna
+  const zadnjiDan  = addDays(baza, 14);           // petnajsti dan, isti dan v tednu
+  const bazaISO = iso(baza), zadnjiISO = iso(zadnjiDan);
+
+  let html = "";
+  for(let k=0;k<21;k++){
+    const d = addDays(prviVMrezi, k), dISO = iso(d);
+    if(dISO > zadnjiISO){ html += '<span class="prazno"></span>'; continue; }
+    const wknd = (d.getDay()===0 || d.getDay()===6);
+    let razred = "";
+    if(dISO === bazaISO)      razred = "cur";     // dan, na katerem smo – ni izbirljiv
+    else if(dISO < bazaISO)   razred = "mimo";    // pretekli dnevi – posvetljeni
+    else if(wknd)             razred = "wknd";
+    const izbirljiv = (dISO > bazaISO);
+    html += '<button class="'+razred+'" data-date="'+(izbirljiv ? dISO : "")+'">'+
+              d.getDate()+
+            '</button>';
+  }
+  moveDays.innerHTML = html;
+}
+
+/* Meni, ko ima zapisek uro: zgoraj samo "premik na (datum)",
+   ura pa stoji pri besedi URO. */
+function nastaviMeniZaUro(t, dateISO){
+  document.getElementById("moveLead2").textContent = "premik na "+kratekDatum(dateISO);
+  document.getElementById("uroOznaka").textContent = "Uro "+t.ura.replace(":",".");
+}
+
+function moveKorak(n){
+  moveStep1.hidden = (n !== 1);
+  moveStep2.hidden = (n !== 2);
+  moveStep3.hidden = (n !== 3);
+}
+
+function openMove(id){
+  const t = state.tasks.find(x => x.id === id); if(!t) return;
+  moveId = id;
+  risiVrsticoDni(parseISO(danZapiska(t)));
+  btnReset.hidden = !t.defer;
+  moveKorak(1);
+  ciljniDan = null;
+  moveModal.classList.add("open");
+}
+function closeMove(){
+  moveModal.classList.remove("open");
+  moveId = null; ciljniDan = null;
+  moveKorak(1);                                      // nikoli ne obtiči na poznejšem koraku
+}
+
+/* Vrnitev iz kolesja nazaj v meni Izbrišem / Obdržim / Spremenim.
+   Okence za premik je bilo medtem zaprto, zato ga postavimo znova –
+   z isto nalogo in istim ciljnim dnem. */
+function nazajVMeniZaUro(id, dan){
+  const t = state.tasks.find(x => x.id === id);
+  if(!t || !t.ura){ return; }
+  moveId = id; ciljniDan = dan;
+  risiVrsticoDni(parseISO(danZapiska(t)));
+  btnReset.hidden = !t.defer;
+  nastaviMeniZaUro(t, dan);
+  moveKorak(2);
+  moveModal.classList.add("open");
+}
+
+/* Dan je izbran. Če ima naloga uro, se najprej pojavi meni
+   Izbrišem / Obdržim / Spremenim, šele nato se premik izvede. */
+function zacniPremik(dateISO){
+  const t = state.tasks.find(x => x.id === moveId); if(!t) return;
+  if(!t.ura || !dateISO){ applyMove(dateISO); return; }
+  ciljniDan = dateISO;
+  nastaviMeniZaUro(t, dateISO);
+  moveKorak(2);
+}
+
+function applyMove(dateISO){
+  const t = state.tasks.find(x => x.id === moveId); if(!t) return;
+  t.defer = dateISO || null;      // prazno = prekliči odlog, spet se prestavlja sam
+  t.pripet = false;               // ročni premik vedno prekine pripetost
+  t.nocniPremik = false;          // odslej ste ga premaknili vi – puščica se vrne
+  persist(); refreshIndex();
+  /* Povemo, kam je zapisek RES pristal, ne kam ste kliknili.
+     Pri gumbu "Nazaj na prvotni/današnji dan" to ni isto – dan se izračuna. */
+  obvesti("Prestavljeno na " + kratekDatum(placementOf(t, todayISO())));
+  closeMove(); prerisiSeznam(false); refreshVisible();
+}
+
+moveModal.addEventListener("click", ev => {
+  if(ev.target.closest("[data-close]")){ closeMove(); return; }
+  if(ev.target.closest("#btnReset")){ applyMove(""); return; }
+  if(ev.target.closest("#moveCalNazaj")){ moveKorak(1); return; }
+  if(ev.target.closest("#odpriKoledar")){
+    const naloga = state.tasks.find(x => x.id === moveId); if(!naloga) return;
+    const host = document.getElementById("moveCalHost");
+    host.innerHTML = "";
+    /* Pravilo dejavnosti (sklop 3, točka 28, 30. 8. 2026):
+       dejavni so vsi datumi med današnjim in tistim, na katerem zapisek
+       leži, in vsi za njim. Nedejavna ostaneta današnji datum in datum,
+       na katerem zapisek že leži - premik nanju ne bi spremenil ničesar. */
+    const tISO = todayISO(), lezi = danZapiska(naloga);
+    host.appendChild(KoledarIzbirnik({
+      danes: tISO,
+      izbrano: lezi,
+      dejaven: d => d > tISO && d !== lezi,
+      izbira: d => zacniPremik(d)
+    }));
+    moveKorak(3);
+    return;
+  }
+
+  const t = state.tasks.find(x => x.id === moveId);
+  // če se je vmes izgubila naloga ali ciljni dan, okence zapremo, ne pa tiho molčimo
+  if(ev.target.closest("#uroIzbrisem") || ev.target.closest("#uroObdrzim")){
+    if(!t || !ciljniDan){ closeMove(); return; }
+  }
+  if(t && ev.target.closest("#uroIzbrisem")){
+    t.ura = null; t.uraNaslednjiDan = false;
+    applyMove(ciljniDan); return;
+  }
+  if(t && ev.target.closest("#uroObdrzim")){ applyMove(ciljniDan); return; }
+  if(ev.target.closest("#uroSpremeniOdpri")){
+    if(!t || !ciljniDan){ closeMove(); return; }
+    premikCaka = ciljniDan;            // po potrditvi ure se izvede še premik
+    const id = moveId;
+    closeMove();
+    openUra(id);
+    return;
+  }
+
+  const b = ev.target.closest(".dayline [data-date]");
+  if(b && b.dataset.date) zacniPremik(b.dataset.date);
+});
+
+
+
+
+/* ============================================================
+   6d. KOLEDARSKI IZBIRNIK – lastna komponenta
+   Sistemski koledar se v gumbu "Drug datum" ni odprl zanesljivo,
+   zato uporabljamo lastnega, tako kot pri kolesju za uro.
+   Ista koda živi tudi samostojno v koledar-izbirnik.html.
+   ============================================================ */
+function KoledarIzbirnik(nastavitve){
+  const o = nastavitve || {};
+  const DNI = ["p","t","s","č","p","s","n"];
+  const p2  = n => String(n).padStart(2,"0");
+
+  /* Seznam se začne pri mesecu današnjega dne in traja 24 mesecev
+     (dogovorjeno 30. 8. 2026). Če zapisek leži dlje, se podaljša do njega,
+     sicer ga v seznamu sploh ne bi bilo. */
+  const zd = (o.danes || "").split("-");
+  const leto0 = +zd[0], mesec0 = +zd[1]-1;
+  let dolzina = o.mesecev || 24;
+  if(o.izbrano){
+    const iz = o.izbrano.split("-");
+    const razlika = (+iz[0]-leto0)*12 + (+iz[1]-1-mesec0) + 2;
+    if(razlika > dolzina) dolzina = razlika;
+  }
+
+  const el = document.createElement("div");
+  el.className = "cal";
+  el.innerHTML =
+    '<div class="cal-head">'+
+      '<button class="cal-nav" data-skok="-1">‹</button>'+
+      '<div class="cal-title"></div>'+
+      '<button class="cal-nav" data-skok="1">›</button>'+
+    '</div>'+
+    '<div class="cal-dow">'+DNI.map(x=>"<span>"+x+"</span>").join("")+'</div>'+
+    '<div class="cal-list"></div>';
+
+  const naslov = el.querySelector(".cal-title");
+  const seznam = el.querySelector(".cal-list");
+  const nazaj  = el.querySelector('[data-skok="-1"]');
+  const naprej = el.querySelector('[data-skok="1"]');
+
+  function blokMeseca(k){
+    const leto  = leto0 + Math.floor((mesec0+k)/12);
+    const mesec = ((mesec0+k) % 12 + 12) % 12;
+    const zamik = (new Date(leto,mesec,1).getDay()+6)%7;   // ponedeljek = 0
+    const dni   = new Date(leto,mesec+1,0).getDate();
+    let celice = "";
+    for(let i=0;i<zamik;i++) celice += '<div class="cal-day pad"></div>';
+    for(let d=1; d<=dni; d++){
+      const datum = leto+"-"+p2(mesec+1)+"-"+p2(d);
+      let razred = "cal-day";
+      if(o.dejaven && !o.dejaven(datum)) razred += " off";
+      if(datum === o.izbrano) razred += " sel";
+      if(datum === o.danes)   razred += " today";
+      celice += '<button class="'+razred+'" data-d="'+datum+'">'+d+'</button>';
+    }
+    const sek = document.createElement("section");
+    sek.className = "cal-mesec";
+    sek.dataset.k = k;
+    sek.dataset.ime = MES_KRATKO[mesec]+" "+leto;
+    sek.innerHTML = '<div class="cal-crta">'+MES_KRATKO[mesec]+" "+leto+'</div>'+
+                    '<div class="cal-grid">'+celice+'</div>';
+    return sek;
+  }
+
+  /** Kateri mesec je trenutno na vrhu seznama. */
+  function mesecNaVrhu(){
+    const vrh = seznam.scrollTop + 4;
+    let k = 0;
+    for(const sek of seznam.children) if(sek.offsetTop <= vrh) k = Number(sek.dataset.k);
+    return k;
+  }
+  function osveziGlavo(){
+    const k = mesecNaVrhu();
+    naslov.textContent = seznam.children[k].dataset.ime;
+    nazaj.disabled  = (k === 0);
+    naprej.disabled = (k >= dolzina-1);
+  }
+  function naMesec(smer){
+    const k = Math.min(dolzina-1, Math.max(0, mesecNaVrhu() + smer));
+    seznam.scrollTo({ top: seznam.children[k].offsetTop, behavior:"smooth" });
+  }
+
+  let cakam = false;
+  seznam.addEventListener("scroll", () => {
+    if(cakam) return;
+    cakam = true;
+    requestAnimationFrame(() => { cakam = false; osveziGlavo(); });
+  }, {passive:true});
+
+  el.addEventListener("click", ev => {
+    const nav = ev.target.closest("[data-skok]");
+    if(nav){ naMesec(Number(nav.dataset.skok)); return; }
+    const dan = ev.target.closest("[data-d]");
+    if(dan && !dan.classList.contains("off") && typeof o.izbira === "function"){
+      o.izbira(dan.dataset.d);
+    }
+  });
+
+  for(let k=0;k<dolzina;k++) seznam.appendChild(blokMeseca(k));
+
+  /* Odpremo pri mesecu, na katerem zapisek leži (dogovorjeno 30. 8. 2026).
+     Šele po vrisu, ker offsetTop prej ni znan. */
+  requestAnimationFrame(() => {
+    const cilj = (o.izbrano || o.danes).split("-");
+    const k = Math.max(0, Math.min(dolzina-1,
+      (+cilj[0]-leto0)*12 + (+cilj[1]-1-mesec0)));
+    seznam.scrollTop = seznam.children[k].offsetTop;
+    osveziGlavo();
+  });
+
+  return el;
+}
+
+/* Opomba: sistemski izbirnik datuma je bil odstranjen; uporabljamo
+   lastnega, ker se sistemski v gumbu "Drug datum" ni odprl zanesljivo.
+   Ista koda živi tudi v Preizkusi/koledar-izbirnik.html - ob vsaki
+   spremembi je treba posodobiti obe datoteki. */
+
+/* ============================================================
+   7. VSE NALOGE ZA PRIKAZANO OBDOBJE
+   ============================================================ */
+const allSheet = document.getElementById("allSheet");
+const allBody  = document.getElementById("allBody");
+const allTitle = document.getElementById("allTitle");
+
+function openAll(){
+  const [from, to] = feed.ctxRange;
+  const tISO = todayISO();
+  const label = state.view==="teden" ? "Ta teden" : state.view==="mesec" ? "Ta mesec" : "To leto";
+  allTitle.textContent = "Vse naloge · " + label;
+
+  const inRange = state.tasks.filter(t => {
+    const p = placementOf(t, tISO);
+    return (t.created >= from && t.created <= to) || (p >= from && p <= to);
+  });
+  const open = inRange.filter(t=>!t.done).sort((a,b)=>a.created.localeCompare(b.created));
+  const done = inRange.filter(t=> t.done).sort((a,b)=>(b.doneDate||"").localeCompare(a.doneDate||""));
+
+  /* Glava strani nosi samo še razpon datumov, poravnan levo.
+     Napisa »N odprtih nalog« in »· N opravljenih« sta odstranjena
+     30. 8. 2026 (točka 37): števili sta odslej ob naslovih skupin.
+     Prostor, ki je s tem nastal, bo v sklopu 6 zasedel gumb za
+     razvrstitev po stopnji nujnosti. */
+  let html = '<div class="day-hero"><div class="small">'+
+    kratekDatum(from)+" – "+kratekDatum(to)+'</div></div>';
+
+  if(!inRange.length){
+    html += '<div class="empty">V tem obdobju ni nalog.</div>';
+  }
+  /* Ista vrstica kot v dnevnem listu – zato se zapisek tu ureja
+     na popolnoma enak način. Imena za prehod pogleda tu ni, ker
+     dnevni list ostane v strani in bi se imena podvojila. */
+  if(open.length){
+    /* Ločilna črta ob vsaki spremembi datuma nastanka, tudi nad prvim
+       zapiskom. Seznam je po datumu nastanka že urejen (sort zgoraj),
+       zato je to samo izris in ne razvrščanje. (Točka 32.) */
+    html += '<div class="group-title">'+odprteNaslov(open.length)+'</div><div class="notes">';
+    let prejsnjiDatum = null;
+    for(const t of open){
+      if(t.created !== prejsnjiDatum){
+        html += '<div class="crta">'+kratekDatum(t.created)+'</div>';
+        prejsnjiDatum = t.created;
+      }
+      html += vrsticaZapiska(t, false);
+    }
+    html += '</div>';
+  }
+  if(done.length){
+    /* V skupini »Opravljene« črt namenoma ni, zato tudi razvrstitve ne
+       spreminjamo: nazadnje opravljene ostanejo prve. (Točka 32.) */
+    html += '<div class="group-title">'+opravljeneBeseda(done.length)+'</div><div class="notes">';
+    for(const t of done) html += vrsticaZapiska(t, false);
+    html += '</div>';
+  }
+  allBody.innerHTML = html;
+  allSheet.classList.add("open");
+  aktivniSeznam = "vse";
+}
+
+allBody.addEventListener("click", klikVZapisku);
+allBody.addEventListener("input", pisanjeVZapisku);
+allBody.addEventListener("keydown", enterVZapisku);
+allBody.addEventListener("keydown", vracalkaVZapisku);
+allBody.addEventListener("beforeinput", vracalkaPredVnosom);
+
+document.getElementById("allBack").addEventListener("click", () => {
+  allSheet.classList.remove("open");
+  aktivniSeznam = "dan";
+  refreshIndex(); refreshVisible();
+});
+document.getElementById("btnAll").addEventListener("click", () => openAll());
+
+/* ============================================================
+   8. KLIKI V SEZNAMU + PREKLOP POGLEDA
+   ============================================================ */
+feedEl.addEventListener("click", ev => {
+  /* Klik na mesec v letnem prikazu odpre ta mesec v mesečnem prikazu.
+     (Sklop 3, točka 29, 30. 8. 2026.) */
+  const mes = ev.target.closest("[data-mesec]");
+  if(mes){
+    const d = mes.dataset.mesec.split("-").map(Number), zdaj = today();
+    state.view = "mesec";
+    for(const x of document.getElementById("seg").children)
+      x.classList.toggle("on", x.dataset.view === "mesec");
+    refreshIndex();
+    buildFeed((d[0]-zdaj.getFullYear())*12 + (d[1]-1-zdaj.getMonth()));
+    return;
+  }
+  const el = ev.target.closest("[data-date]");
+  if(el) openDay(el.dataset.date);
+});
+document.getElementById("seg").addEventListener("click", ev => {
+  const b = ev.target.closest("button[data-view]"); if(!b) return;
+  state.view = b.dataset.view;
+  for(const x of ev.currentTarget.children) x.classList.toggle("on", x === b);
+  refreshIndex();
+  buildFeed();
+});
+document.getElementById("btnToday").addEventListener("click", () => {
+  refreshIndex(); buildFeed();
+});
+
+/** Ponovno nariše samo trenutno vidne enote (po spremembi nalog). */
+function refreshVisible(){
+  const keepTop = feedEl.scrollTop;
+  const olds = Array.from(feedEl.children);
+  for(const old of olds){
+    const i = Number(old.dataset.unit);
+    feedEl.replaceChild(renderUnit(state.view, i), old);
+  }
+  feedEl.scrollTop = keepTop;
+  updateCtx();
+}
+
+/* ============================================================
+   8b. OBVESTILO PO PREMIKU
+   En sam trak. Vsako novo sporočilo prepiše prejšnje in znova
+   zažene odštevanje, zato se nikoli ne pojavita dva hkrati.
+   Stoji 1,5 sekunde. Na dotik se ne odziva.
+   ============================================================ */
+/* Trak stoji cele 2,5 sekunde. Nič ga ne skrajša – ne dotik, ne
+   zapiranje okenc, ne menjava pogleda. Edina izjema je nov premik:
+   takrat trak dobi novo besedilo in odštevanje se začne znova. */
+const OBVESTILO_MS = 2500;
+const obvestiloEl = document.getElementById("obvestilo");
+let obvestiloUra = null;
+
+function obvesti(besedilo){
+  obvestiloEl.textContent = besedilo;
+  obvestiloEl.classList.add("vidno");
+  if(obvestiloUra) clearTimeout(obvestiloUra);
+  obvestiloUra = setTimeout(() => obvestiloEl.classList.remove("vidno"), OBVESTILO_MS);
+}
+
+/* ============================================================
+   8c. TIPKOVNICA IN VIDNI DEL ZASLONA
+   iOS Safari ob odprtju tipkovnice strani ne pomanjša, ampak jo
+   potisne navzgor. Dnevni list je pribit čez cel zaslon, zato bi
+   njegovo dno končalo pod tipkovnico in do njega ne bi bilo mogoče
+   zdrsniti. Zato listu sami nastavimo višino vidnega dela zaslona.
+   Vir: Visual Viewport API, na iPhonu podprt od Safarija 13.
+   Kjer tega ni, ostaneta privzeti vrednosti 100% in 0 – kot doslej.
+   ============================================================ */
+const vidno = window.visualViewport;
+
+function uskladiZVidnim(){
+  if(!vidno) return;
+  const kor = document.documentElement;
+  kor.style.setProperty("--vidna-visina", vidno.height + "px");
+  kor.style.setProperty("--vidni-vrh",    vidno.offsetTop + "px");
+  /* Tipkovnica je odprta, kadar je vidni del zaslona občutno manjši od
+     strani. Prag 60 px je zato, da vrstica z naslovom brskalnika, ki se
+     ob drsenju skrije in pokaže, tega ne vklaplja po nepotrebnem. */
+  kor.classList.toggle("tipkovnica", (kor.clientHeight - vidno.height) > 60);
+}
+if(vidno){
+  vidno.addEventListener("resize", uskladiZVidnim);
+  vidno.addEventListener("scroll", uskladiZVidnim);
+  uskladiZVidnim();
+}
+
+/* Nov zapisek pripeljemo v vidno polje.
+   "end" ga postavi na SPODNJI rob vidnega dela, torej tik nad tipkovnico.
+   Prej je bil na sredini, zato so se pod njim videli odkljukani zapiski,
+   ki na tem mestu samo motijo (popravek 21. 8. 2026).
+   Prvič zdrsnemo takoj, drugič ko se tipkovnica dejansko odpre – takrat se
+   vidni del zaslona spremeni in prvi izračun ne velja več.
+   Varovalka počisti čakanje, če se tipkovnica sploh ne odpre. */
+function pripeljiVVidno(el){
+  const vrstica = el.closest(".note") || el;   // cela vrstica, ne samo besedilo
+  const zdrsni = () => vrstica.scrollIntoView({ block:"end", behavior:"smooth" });
+  zdrsni();
+  if(!vidno) return;
+  const obTipkovnici = () => { uskladiZVidnim(); zdrsni(); };
+  vidno.addEventListener("resize", obTipkovnici, { once:true });
+  setTimeout(() => vidno.removeEventListener("resize", obTipkovnici), 1200);
+}
+
+/* ============================================================
+   9. POMOŽNO
+   ============================================================ */
+function escapeHTML(s){
+  return String(s).replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+/* Če je aplikacija dolgo odprta in se zamenja dan – osveži. */
+let lastDay = todayISO();
+setInterval(() => {
+  const n = todayISO();
+  if(n !== lastDay){ lastDay = n; refreshIndex(); buildFeed(); }
+}, 60000);
+
+/* zagon */
+buildFeed();
+</script>
+
+<!-- ================= PREIZKUSNA PLOSCA: ODBOJ (overscroll) =================
+     Dodano samo za preizkus. Aplikacija sama je nespremenjena.
+     Stiri moznosti:
+       IZKLOP    - kot je zdaj
+       CONTAIN   - .sheet-body{overscroll-behavior:contain}  (odboj OSTANE)
+       NONE      - .sheet-body{overscroll-behavior:none}     (odboj se preprecі)
+       PRESTREZ  - touchmove se na robu seznama prestreze (body-scroll-lock)
+     Gumbi NE zaprejo tipkovnice.
+     ========================================================================= -->
+<style>
+#obPlosca{
+  position:fixed;left:0;right:0;z-index:9999;
+  background:#fff;border-top:3px solid #000;border-bottom:3px solid #000;
+  padding:6px 6px 5px;font:13px/1.2 -apple-system,system-ui,sans-serif;
+}
+#obPlosca .g{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+#obPlosca button{
+  padding:10px 2px;border:2px solid #4a4aff;border-radius:9px;background:#fff;
+  color:#2a2ad0;font-weight:800;font-size:13px;line-height:1.1;
+}
+#obPlosca button.on{background:#4a4aff;color:#fff}
+#obPlosca .s{text-align:center;font-size:11px;font-weight:700;color:#333;padding-top:5px}
+</style>
+
+<div id="obPlosca">
+  <div class="g">
+    <button type="button" data-n="0">IZKLOP</button>
+    <button type="button" data-n="1">CONTAIN</button>
+    <button type="button" data-n="2">NONE</button>
+    <button type="button" data-n="3">PRESTREZ</button>
+  </div>
+  <div class="s" id="obStanje">&mdash;</div>
+</div>
+
+<script>
+(function(){
+  var vidno  = window.visualViewport;
+  var plosca = document.getElementById('obPlosca');
+  var stanje = document.getElementById('obStanje');
+  var slog   = document.createElement('style');
+  document.head.appendChild(slog);
+
+  var IMENA = ['IZKLOP \u2013 kot je zdaj', 'CONTAIN', 'NONE', 'PRESTREZANJE touchmove'];
+  var nacin = 0;
+
+  var podpira = (window.CSS && CSS.supports)
+      ? CSS.supports('overscroll-behavior', 'none') : false;
+
+  function seznami(){
+    var a = [document.getElementById('dayBody'), document.getElementById('allBody')];
+    return a.filter(function(x){ return !!x; });
+  }
+
+  /* ---- prestrezanje na robu seznama (uhojena pot: body-scroll-lock) ---- */
+  var zacY = 0;
+  function naDotik(e){ if(e.touches && e.touches.length) zacY = e.touches[0].clientY; }
+  function naPotegu(e){
+    var el = e.currentTarget;
+    if(!e.touches || !e.touches.length) return;
+    var dy = e.touches[0].clientY - zacY;
+    var nicZaDrsanje = el.scrollHeight <= el.clientHeight + 1;
+    var naVrhu = el.scrollTop <= 0;
+    var naDnu  = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+    if(nicZaDrsanje || (naVrhu && dy > 0) || (naDnu && dy < 0)){
+      if(e.cancelable) e.preventDefault();
+    }
+  }
+  function prestrezanje(vklop){
+    seznami().forEach(function(el){
+      el.removeEventListener('touchstart', naDotik);
+      el.removeEventListener('touchmove',  naPotegu);
+      if(vklop){
+        el.addEventListener('touchstart', naDotik, {passive:true});
+        el.addEventListener('touchmove',  naPotegu, {passive:false});
+      }
+    });
+  }
+
+  function uporabi(){
+    slog.textContent =
+      nacin === 1 ? '.sheet-body{overscroll-behavior:contain}' :
+      nacin === 2 ? '.sheet-body{overscroll-behavior:none}'    : '';
+    prestrezanje(nacin === 3);
+    var gumbi = plosca.querySelectorAll('button');
+    for(var i = 0; i < gumbi.length; i++){
+      gumbi[i].className = (+gumbi[i].getAttribute('data-n') === nacin) ? 'on' : '';
+    }
+    stanje.textContent = IMENA[nacin] + '  \u00b7  overscroll-behavior: '
+                       + (podpira ? 'PODPRT' : 'NI PODPRT');
+    window.__odboj = { nacin: nacin, podpira: podpira };
+  }
+
+  function izberi(n){ nacin = n; uporabi(); }
+
+  /* Na dotik reagiramo sami in dogodek ustavimo - tako polje ne izgubi
+     fokusa in tipkovnica ostane odprta. */
+  var zadnjiDotik = 0;
+  plosca.addEventListener('touchstart', function(e){
+    var b = e.target.closest ? e.target.closest('button') : null;
+    if(!b) return;
+    if(e.cancelable) e.preventDefault();
+    zadnjiDotik = Date.now();
+    izberi(+b.getAttribute('data-n'));
+  }, {passive:false});
+
+  plosca.addEventListener('click', function(e){
+    if(Date.now() - zadnjiDotik < 1200) return;
+    var b = e.target.closest ? e.target.closest('button') : null;
+    if(!b) return;
+    izberi(+b.getAttribute('data-n'));
+  });
+
+  function postavi(){
+    if(!vidno){ plosca.style.bottom = '0px'; return; }
+    plosca.style.top = (vidno.offsetTop + vidno.height - plosca.offsetHeight) + 'px';
+  }
+  if(vidno) vidno.addEventListener('resize', postavi);
+  window.addEventListener('resize', postavi);
+  setInterval(postavi, 400);
+
+  uporabi();
+  postavi();
+})();
+</script>
+
+</body>
+</html>
