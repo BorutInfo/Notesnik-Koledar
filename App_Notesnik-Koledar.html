@@ -32,7 +32,6 @@
   /* Vidni del zaslona. Dokler ni tipkovnice, je to cel zaslon.
      Ko se tipkovnica odpre, ju popravi Visual Viewport API. */
   --vidna-visina:100%;
-  --vidni-vrh:0px;
 }
 /* TEMNI NAČIN JE ZAENKRAT IZKLOPLJEN.
    Aplikacija ne sledi več sistemski nastavitvi telefona; vedno je svetla.
@@ -240,7 +239,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   visibility:hidden;
   /* List se drži VIDNEGA dela zaslona, ne celega. Brez tega njegovo
      dno konča pod tipkovnico in do njega ni mogoče zdrsniti. */
-  top:var(--vidni-vrh);bottom:auto;height:var(--vidna-visina);
+  top:0;bottom:auto;height:var(--vidna-visina);
 }
 .sheet.open{transform:translateY(0);visibility:visible}
 .sheet-top{
@@ -1934,15 +1933,47 @@ function obvesti(besedilo){
    ============================================================ */
 const vidno = window.visualViewport;
 
+/* Dnevni list se drzi prostora nad tipkovnico. Trije dogovori - iste tri
+   uporablja knjiznica vaul (pod shadcn/ui), ki resuje isto tezavo:
+
+   1. Poslusamo samo "resize". Sporocilo "scroll" na iPhonu pride sele, ko
+      se poteg konca (WebKit 218465), zato je za to neuporabno.
+   2. Pisemo samo visino. Zgornjega roba ne pisemo nikoli - ostane 0.
+   3. Odzovemo se sele, ko je sprememba vecja od PRAG pik. Drobna nihanja
+      (vrstica z naslovom brskalnika, odboj na robu) so prej ob vsakem
+      premiku prsta prepisala velikost lista - od tod tresenje.
+
+   Visine tipkovnice nikjer ne vpisujemo; telefon jo pove sam. Zato dela
+   na vsaki napravi in pri vsaki velikosti tipkovnice.
+   (Sklop 3, tocka 41, popravljeno 31. 8. 2026.) */
+const PRAG = 60;             // manjsih sprememb ne upostevamo
+let polnaVisina   = null;    // prostor, ko tipkovnice ni - izmerjen
+let zapisanaVisina = null;   // kar smo listu nazadnje napisali
+
 function uskladiZVidnim(){
   if(!vidno) return;
   const kor = document.documentElement;
+
+  /* Polno visino merimo samo, kadar tipkovnice ni. Sicer bi si ob prehodu
+     na naslednje polje zapomnili visino s tipkovnico vred. */
+  if(polnaVisina === null || (zapisanaVisina === null && vidno.height > polnaVisina))
+    polnaVisina = vidno.height;
+
+  if(polnaVisina - vidno.height <= PRAG){        // tipkovnice ni
+    if(zapisanaVisina !== null){
+      kor.style.setProperty("--vidna-visina", "100%");
+      zapisanaVisina = null;
+    }
+    return;
+  }
+  /* Tipkovnica je odprta. Pisemo le, ce se je visina res obcutno
+     spremenila - drugace bi ob vsakem drobnem nihaju list poskocil. */
+  if(zapisanaVisina !== null && Math.abs(vidno.height - zapisanaVisina) <= PRAG) return;
+  zapisanaVisina = vidno.height;
   kor.style.setProperty("--vidna-visina", vidno.height + "px");
-  kor.style.setProperty("--vidni-vrh",    vidno.offsetTop + "px");
 }
 if(vidno){
   vidno.addEventListener("resize", uskladiZVidnim);
-  vidno.addEventListener("scroll", uskladiZVidnim);
   uskladiZVidnim();
 }
 
