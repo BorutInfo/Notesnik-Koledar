@@ -1937,15 +1937,8 @@ const vidno = window.visualViewport;
 function uskladiZVidnim(){
   if(!vidno) return;
   const kor = document.documentElement;
-  /* POSKUS 31. 8. 2026: dnevni list se ob tipkovnici NE skrci vec.
-     Naslednji dve vrstici sta zato izklopljeni. Ostaneta privzeti
-     vrednosti iz :root (visina 100 %, vrh 0), torej list pokriva cel
-     zaslon tako kot prej, ko polje ni bilo aktivno.
-     Za vrnitev v prejsnje stanje se komentar okoli njiju odstrani. */
-  /*
   kor.style.setProperty("--vidna-visina", vidno.height + "px");
   kor.style.setProperty("--vidni-vrh",    vidno.offsetTop + "px");
-  */
 }
 if(vidno){
   vidno.addEventListener("resize", uskladiZVidnim);
