@@ -13,7 +13,7 @@
   body{margin:0;padding:14px 12px 60px;background:var(--bg);color:#111;
        font:17px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
   h1{font-size:20px;margin:0 0 6px}
-  h2{font-size:17px;margin:22px 0 6px}
+  h2{font-size:17px;margin:24px 0 6px}
   p{margin:0 0 10px}
   .uvod{color:#444}
   .drobno{font-size:14px;color:var(--dim)}
@@ -40,21 +40,21 @@
     color:var(--dim);font-size:17px;display:flex;align-items:center;justify-content:center;
     background:none;border:0}
 
-  /* TO JE EDINA RAZLIKA MED POLJEMA */
-  .krepka::first-line{font-weight:700}
+  /* DVE RAZLIKI, KI JU MERIMO */
+  .krepka::first-line{font-weight:700}   /* krepka prva vrstica */
+  .prelomi{white-space:pre-wrap}         /* prelomi vrstic se vidijo */
 
   .oznaka{font-size:14px;font-weight:700;color:var(--dim);margin:14px 0 4px;
           letter-spacing:.04em}
   .izid{background:#fff;border:1px solid var(--line);border-radius:10px;
         padding:10px 12px;font-size:16px;margin-top:10px}
-  .izid b{color:#000}
   .sodba{font-weight:700;font-size:17px}
   .da{color:#1a7a3c} .ne{color:#b3261e}
   button.veliki{display:block;width:100%;padding:14px;border:0;border-radius:12px;
     background:var(--accent);color:#fff;font-size:17px;font-weight:700;margin-top:14px}
   pre{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px;
       font-size:13px;white-space:pre-wrap;word-break:break-all;margin:0}
-  textarea{width:100%;height:150px;margin-top:10px;border:1px solid var(--line);
+  textarea{width:100%;height:170px;margin-top:10px;border:1px solid var(--line);
     border-radius:10px;padding:10px;font-size:13px;background:#fff}
 </style>
 </head>
@@ -99,8 +99,9 @@
 
 <!-- ============ 2 ============ -->
 <h2>2. Kaj naredi tipka Enter</h2>
-<p>Kliknite v spodnje polje. Napišite <b>ena</b>, pritisnite Enter, napišite <b>dve</b>, pritisnite Enter, napišite <b>tri</b>. Nato pritisnite gumb pod poljem.</p>
+<p>Dve polji. V <b>vsako</b> napišite <b>ena</b>, Enter, <b>dve</b>, Enter, <b>tri</b>. Nato pritisnite gumb pod njima.</p>
 
+<div class="oznaka">C – TAKO JE DANES</div>
 <div class="notes">
   <div class="note">
     <div class="note-main">
@@ -112,13 +113,27 @@
     <button class="note-move">▤</button><button class="note-del">×</button>
   </div>
 </div>
+
+<div class="oznaka">D – NOV NAČIN</div>
+<div class="notes">
+  <div class="note">
+    <div class="note-main">
+      <span class="note-date">1. sep</span><span class="chk"></span>
+      <div class="note-line">
+        <div class="note-text prelomi" id="poljeD" contenteditable="plaintext-only"></div>
+      </div>
+    </div>
+    <button class="note-move">▤</button><button class="note-del">×</button>
+  </div>
+</div>
+
 <button class="veliki" id="gumbEnter">Poglej, kaj je nastalo</button>
 <pre id="izid2">(še ni izmerjeno)</pre>
-<p class="drobno">Ta izpis je zame. Vam ga ni treba razumeti.</p>
+<p class="drobno">Ta izpis je zame. Vam ga ni treba razumeti. Vas zanima le, ali sta v obeh poljih res tri vrstice pod seboj.</p>
 
 <!-- ============ 3 ============ -->
-<h2>3. Krepko med tipkanjem</h2>
-<p>Pišite v to polje daljši stavek, da se prelomi v več vrstic. Glejte, ali krepki del ostane na prvi vrstici in ali med tipkanjem poskakuje.</p>
+<h2>3. Tako naj bi bilo v aplikaciji</h2>
+<p>To polje ima oboje hkrati: prelome vrstic in krepko prvo vrstico. Pišite vanj, pritiskajte Enter in glejte, ali krepki del ostane na prvi vrstici in ali med tipkanjem poskakuje.</p>
 
 <div class="notes">
   <div class="note">
@@ -126,7 +141,8 @@
       <span class="note-date">1. sep</span><span class="chk"></span>
       <div class="note-line">
         <button class="ura-btn">17.30</button>
-        <div class="note-text krepka" id="poljeD" contenteditable="true">Kupiti strune za kitaro in nove note</div>
+        <div class="note-text krepka prelomi" id="poljeE" contenteditable="plaintext-only">• Poklicati Marka glede najema dvorane za koncert
+• Vzeti s seboj note in stojalo</div>
       </div>
     </div>
     <button class="note-move">▤</button><button class="note-del">×</button>
@@ -161,8 +177,8 @@ function prvaVrstica(el){
   return {znakov, besedilo, sirina:Math.round(desno)};
 }
 
-/* Odlocilna meritev: kako siroko je prvih 15 znakov.
-   Prelom vrstice je preskakav - sirina ni. */
+/* Odločilna meritev za krepko: kako široko je prvih 15 znakov.
+   Prelom vrstice je preskakav, širina ni. */
 function sirinaZacetka(el, n){
   const hod = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   const prvi = hod.nextNode(); if(!prvi) return 0;
@@ -178,7 +194,7 @@ function izmeri1(){
   b.zacetek = sirinaZacetka(document.getElementById("poljeB"), 15);
   const dela = a.zacetek > b.zacetek + 0.5;
   document.getElementById("izid1").innerHTML =
-    'Prvih 15 znakov je v polju <b>A</b> \u0161iroko <b>'+a.zacetek+'</b> pik,<br>'+
+    'Prvih 15 znakov je v polju <b>A</b> široko <b>'+a.zacetek+'</b> pik,<br>'+
     'v polju <b>B</b> pa <b>'+b.zacetek+'</b> pik.<br>'+
     'Na prvi vrstici: A '+a.znakov+' znakov, B '+b.znakov+' znakov.<br>'+
     '<span class="sodba '+(dela?"da":"ne")+'">'+
@@ -187,35 +203,63 @@ function izmeri1(){
   return {a, b, dela};
 }
 
+/* Primerjavo s krepko / brez krepke naredimo SAMO ob nalaganju.
+   Med tipkanjem je ne ponavljamo, da polje ne utripa. */
+let krepkoE = null;
+function primerjajE(){
+  const e = document.getElementById("poljeE");
+  const s = sirinaZacetka(e, 15);
+  e.classList.remove("krepka");
+  const b = sirinaZacetka(e, 15);
+  e.classList.add("krepka");
+  krepkoE = {s, b, dela: s > b + 0.5};
+  return krepkoE;
+}
+
 function izmeri3(){
-  const d = prvaVrstica(document.getElementById("poljeD"));
+  const e = document.getElementById("poljeE");
+  const d = prvaVrstica(e);
+  if(!krepkoE) primerjajE();
+  d.zacetek = krepkoE.s; d.brezKrepke = krepkoE.b; d.dela = krepkoE.dela;
+  d.vrstic = (e.innerText || "").split("\n").length;
   document.getElementById("izid3").innerHTML =
     'Prva vrstica ima <b>'+d.znakov+'</b> znakov:<br>»'+
-    d.besedilo.replace(/&/g,"&amp;").replace(/</g,"&lt;")+'«';
+    d.besedilo.replace(/&/g,"&amp;").replace(/</g,"&lt;")+'«<br>'+
+    'Polje ima <b>'+d.vrstic+'</b> odstavkov.<br>'+
+    '<span class="sodba '+(d.dela?"da":"ne")+'">'+
+      (d.dela ? "Krepko in prelomi delujeta skupaj."
+              : "Krepko tu NE deluje.")+'</span>';
   return d;
+}
+
+function opis(el){
+  return "innerHTML: " + JSON.stringify(el.innerHTML) + "\n" +
+         "textContent: " + JSON.stringify(el.textContent) + "\n" +
+         "innerText:   " + JSON.stringify(el.innerText) + "\n" +
+         "br: " + el.querySelectorAll("br").length +
+         "  div: " + el.querySelectorAll("div").length +
+         "  p: " + el.querySelectorAll("p").length;
 }
 
 let zadnjiEnter = "(gumb ni bil pritisnjen)";
 document.getElementById("gumbEnter").addEventListener("click", () => {
-  const el = document.getElementById("poljeC");
-  const surovo = el.innerHTML;
+  const c = document.getElementById("poljeC"), d = document.getElementById("poljeD");
   zadnjiEnter =
-    "innerHTML: " + surovo + "\n" +
-    "textContent: " + JSON.stringify(el.textContent) + "\n" +
-    "innerText:   " + JSON.stringify(el.innerText) + "\n" +
-    "br: " + el.querySelectorAll("br").length +
-    "  div: " + el.querySelectorAll("div").length +
-    "  p: " + el.querySelectorAll("p").length;
+    "C – TAKO JE DANES\n" + opis(c) + "\n\n" +
+    "D – NOV NAČIN (plaintext-only)\n" + opis(d) + "\n" +
+    "podprt: " + (d.contentEditable === "plaintext-only" ? "DA" : "NE, brskalnik ga ne pozna");
   document.getElementById("izid2").textContent = zadnjiEnter;
   sestaviIzvid();
 });
 
 function sestaviIzvid(){
   const m1 = izmeri1(), m3 = izmeri3();
+  const d = document.getElementById("poljeD");
   const t =
 "IZVID – preizkus besedila zapiska\n"+
 "naprava: širina "+window.innerWidth+" px, gostota "+window.devicePixelRatio+"\n"+
-"brskalnik: "+navigator.userAgent+"\n\n"+
+"brskalnik: "+navigator.userAgent+"\n"+
+"plaintext-only podprt: "+(d.contentEditable === "plaintext-only" ? "DA" : "NE")+"\n\n"+
 "1) KREPKA PRVA VRSTICA\n"+
 "   sirina prvih 15 znakov: A "+m1.a.zacetek+"  B "+m1.b.zacetek+"\n"+
 "   A (naj bo krepka): "+m1.a.znakov+" znakov, desni rob "+m1.a.sirina+"\n"+
@@ -224,7 +268,11 @@ function sestaviIzvid(){
 "   B prva vrstica: \""+m1.b.besedilo+"\"\n"+
 "   SODBA: "+(m1.dela ? "DELUJE" : "NE DELUJE")+"\n\n"+
 "2) ENTER\n   "+zadnjiEnter.replace(/\n/g,"\n   ")+"\n\n"+
-"3) MED TIPKANJEM\n   prva vrstica: "+m3.znakov+" znakov, \""+m3.besedilo+"\"\n";
+"3) OBOJE SKUPAJ\n"+
+"   sirina prvih 15 znakov: s krepko "+m3.zacetek+"  brez "+m3.brezKrepke+"\n"+
+"   SODBA: "+(m3.dela ? "DELUJE" : "NE DELUJE")+"\n"+
+"   prva vrstica: "+m3.znakov+" znakov, \""+m3.besedilo+"\"\n"+
+"   odstavkov: "+m3.vrstic+"\n";
   document.getElementById("izvid").value = t;
   return t;
 }
@@ -234,10 +282,10 @@ document.getElementById("gumbKopiraj").addEventListener("click", async () => {
   try{ await navigator.clipboard.writeText(t);
        document.getElementById("gumbKopiraj").textContent = "Izvid je kopiran ✓"; }
   catch(e){ document.getElementById("gumbKopiraj").textContent =
-       "Kopiranje ni šlo – označite spodaj in kopirajte ročno"; }
+       "Kopiranje ni šlo – označite spodnje besedilo in kopirajte ročno"; }
 });
 
-document.getElementById("poljeD").addEventListener("input", izmeri3);
+document.getElementById("poljeE").addEventListener("input", izmeri3);
 document.getElementById("poljeA").addEventListener("input", izmeri1);
 document.getElementById("poljeB").addEventListener("input", izmeri1);
 addEventListener("load", sestaviIzvid);
