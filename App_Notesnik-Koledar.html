@@ -265,7 +265,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 /* scroll-margin-bottom je namenoma 0: nov zapisek se poravna točno s
    spodnjim robom vidnega dela, da pod njim ne pokuka odkljukani zapisek. */
 .note{display:flex;align-items:flex-start;gap:10px;padding:12px 12px;border-bottom:1px solid var(--line);
-  scroll-margin-bottom:0}
+  scroll-margin-bottom:0;position:relative}
 .note:last-child{border-bottom:0}
 /* Krogec stoji desno od datuma (premaknjen 21. 8. 2026). */
 .chk{
@@ -282,15 +282,29 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
   padding:2px 7px;border-radius:5px;margin-bottom:4px;
 }
 .note.carried .note-date::after{content:" ↷";font-weight:700}
+/* pre-wrap: prelomi vrstic, ki jih naredi tipka Enter, se vidijo.
+   ::first-line: krepka je prva vrstica NA ZASLONU – katere besede so v njej,
+   se sme spremeniti ob obračanju telefona. Izmerjeno 1. 9. 2026 na iPhonu
+   (Safari 26.6): deluje tudi v polju, v katero se piše. */
 .note-text{
   font-size:16px;line-height:1.4;outline:none;word-break:break-word;min-height:22px;
+  white-space:pre-wrap;
 }
+.note-text::first-line{font-weight:700}
+/* Prvi dotik pripravi besedilo: rumeno postane tisto, kar je sicer belo. */
+.note-text.pripravljeno{background:#fff6cc;border-radius:5px}
 .note-text:empty::before{content:"Nov zapisek…";color:var(--dim)}
 .note.done .note-text{text-decoration:line-through;color:var(--dim)}
-.note-del{flex:0 0 auto;width:28px;height:28px;border-radius:50%;color:var(--dim);
+/* Gumba stojita v zgornjem desnem kotu, zunaj vrste. Tako besedilo
+   ni več ožje od zapiska – odstavki tečejo po celi širini pod njima.
+   Izmerjeno: gumba sežeta do 28 px od vrha, besedilo se začne pri 45 px,
+   zato pod njima ni ničesar, kar bi zakrila. */
+.note-del{position:absolute;top:12px;right:12px;
+  width:28px;height:28px;border-radius:50%;color:var(--dim);
   font-size:17px;display:flex;align-items:center;justify-content:center}
 .note-del:active{background:var(--bg);color:var(--danger)}
-.note-move{flex:0 0 auto;width:28px;height:28px;border-radius:50%;color:var(--dim);
+.note-move{position:absolute;top:12px;right:50px;
+  width:28px;height:28px;border-radius:50%;color:var(--dim);
   display:flex;align-items:center;justify-content:center}
 .note-move:active{background:var(--bg);color:var(--accent)}
 .note-move svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.9;
@@ -1147,7 +1161,7 @@ function vrsticaZapiska(t, zPrehodom){
       (waiting ? '<span class="note-wait" data-act="odpriDan" title="Premaknjeno"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 15a7 7 0 0 1 7-7h7"/><path d="M15 4l5 4-5 4"/></svg></span>' : '')+
       '<div class="note-line">'+
         uraGumb(t, dan)+
-        '<div class="note-text" contenteditable="true" data-act="edit">'+escapeHTML(t.text)+'</div>'+
+        '<div class="note-text" contenteditable="plaintext-only" data-act="edit">'+escapeHTML(t.text)+'</div>'+
       '</div>'+
     '</div>'+
     (t.done ? '' : '<button class="note-move" data-act="move" title="Premakni">'+IKONA_KOLEDAR+'</button>')+
@@ -1182,7 +1196,8 @@ function renderDay(focusId){
 
   if(focusId){
     const el = dayBody.querySelector('[data-id="'+focusId+'"] .note-text');
-    if(el){ el.focus(); placeCaretEnd(el); pripeljiVVidno(el); }
+    if(el){ samodejniFokus = true; el.focus(); samodejniFokus = false;
+            placeCaretEnd(el); pripeljiVVidno(el); }
   }
 }
 
@@ -1265,16 +1280,102 @@ function klikVZapisku(ev){
     openDay(kam);
   }
 }
+/* ---------- BESEDILO ZAPISKA (sklop 3, korak 6) ----------
+   Polje je "plaintext-only": brskalnik sam poskrbi, da vanj pride samo
+   golo besedilo. Enter zato naredi pravi prelom vrstice, prilepljeno
+   besedilo pa izgubi tujo obliko. Izmerjeno 1. 9. 2026 na njegovem
+   iPhonu (Safari 26.6) in v Chromiumu: textContent prelome OHRANI –
+   zato se shranjevanje in izris nista spremenila.
+   Pikica je del besedila, ne okras: zapisek se bo nekoč lahko delil
+   naprej. Zato jo vstavimo mi, izbrišete pa jo lahko z vračalko. */
+const PIKA = "• ";
+let prejsnjeBesedilo = "";     // vsebina polja pred zadnjim vnosom
+let vrednostObVstopu = "";     // vsebina polja, ko ste vanj stopili
+let pravkarFokusirano = null;  // polje, ki je fokus dobilo s tem dotikom
+let samodejniFokus = false;    // fokus je dala koda, ne vaš dotik
+
+/* Vstop v besedilo. Polje porumeni – kar natipkate, povozi vse.
+   Pravega označevanja (select) ne uporabljamo, ker iPhone ob njem
+   pokaže oblaček Kopiraj/Prilepi. Uhojena pot iz aplikacije Neto-Bruto. */
+function vstopVBesedilo(ev){
+  const el = ev.target.closest(".note-text"); if(!el) return;
+  prejsnjeBesedilo = vrednostObVstopu = el.textContent;
+  if(samodejniFokus) return;              // fokus je dala koda, ne dotik
+  if(!el.textContent.trim()) return;      // v praznem polju ni kaj povoziti
+  el.classList.add("pripravljeno");
+  pravkarFokusirano = el;
+}
+/* Drugi, ločeni dotik postavi kazalec – takrat pripravljenost odpade. */
+function klikVBesedilo(ev){
+  const el = ev.target.closest(".note-text"); if(!el) return;
+  if(pravkarFokusirano === el){ pravkarFokusirano = null; return; }
+  el.classList.remove("pripravljeno");
+}
+/* Kaj je bilo pravkar vstavljeno: kje in kaj. */
+function vstavljeno(staro, novo){
+  if(novo.length <= staro.length) return null;
+  let z = 0; while(z < staro.length && staro[z] === novo[z]) z++;
+  return { kje: z, kaj: novo.slice(z, z + (novo.length - staro.length)) };
+}
+/* Prelom vrstice. Izmerjeno 2. 9. 2026: kadar pritisnete Enter na koncu
+   besedila, brskalnik vstavi DVA preloma – drugi je tam samo zato, da se
+   nova prazna vrstica vidi. Zato ju sprejmemo oba. */
+const JE_PRELOM = v => v === "\n" || v === "\n\n";
+
+/* Kazalec postavimo na določen znak v besedilu. */
+function postaviKazalec(el, odmik){
+  const hod = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let n, sesteto = 0;
+  while((n = hod.nextNode())){
+    if(sesteto + n.length >= odmik){
+      const r = document.createRange();
+      r.setStart(n, odmik - sesteto); r.collapse(true);
+      const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+      return;
+    }
+    sesteto += n.length;
+  }
+  placeCaretEnd(el);
+}
+/* Prvi znak v pripravljenem polju: brskalnik ga je vstavil v staro
+   besedilo, zato ga izluščimo iz razlike in v polju pustimo samo njega.
+   Ure se ne dotaknemo – ura ni del besedila. Če je bila vračalka,
+   ostane samo pikica. */
+function povoziPripravljeno(el){
+  const v = vstavljeno(vrednostObVstopu, el.textContent);
+  el.classList.remove("pripravljeno"); pravkarFokusirano = null;
+  /* Enter ni znak, ki bi zapisek povozil – naredi nov odstavek.
+     Pripravljenost s tem odpade, besedilo ostane. */
+  if(v && JE_PRELOM(v.kaj)) return false;
+  el.textContent = PIKA + (v ? v.kaj : "");
+  placeCaretEnd(el);
+  return true;
+}
+/* Nov odstavek: brskalnik je vstavil prelom, mi za njim še pikico.
+   Prepoznamo ga po razliki, ne po imenu dogodka – imena se med
+   brskalniki razlikujejo. */
+function pikicaZaPrelom(el){
+  const novo = el.textContent;
+  const v = vstavljeno(prejsnjeBesedilo, novo);
+  if(!v || !JE_PRELOM(v.kaj)) return;
+  el.textContent = novo.slice(0, v.kje) + "\n" + PIKA + novo.slice(v.kje + v.kaj.length);
+  postaviKazalec(el, v.kje + 1 + PIKA.length);
+}
 function pisanjeVZapisku(ev){
   const el = ev.target.closest(".note-text"); if(!el) return;
   const t = state.tasks.find(x => x.id === el.closest(".note").dataset.id); if(!t) return;
-  t.text = el.textContent.trim();
+  if(!el.classList.contains("pripravljeno") || !povoziPripravljeno(el)) pikicaZaPrelom(el);
+  prejsnjeBesedilo = el.textContent;
+  t.text = el.textContent;
   persist();                       // brez prerisovanja, da kazalec ne skoči
 }
-function enterVZapisku(ev){
-  if(ev.key === "Enter" && ev.target.closest(".note-text")){
-    ev.preventDefault(); ev.target.blur();
-  }
+/* Ob koncu pisanja odstavki, v katerih ni ničesar, izginejo. */
+function pospraviOdstavke(el){
+  const t = state.tasks.find(x => x.id === el.closest(".note").dataset.id); if(!t) return;
+  const novo = el.textContent.split("\n")
+    .filter(v => v.replace(/^•\s*/, "").trim() !== "").join("\n");
+  if(novo !== el.textContent) el.textContent = novo;
+  t.text = novo; persist();
 }
 
 dayBody.addEventListener("click", ev => {
@@ -1282,7 +1383,7 @@ dayBody.addEventListener("click", ev => {
     /* Varovalka: v pretekli dan se ne piše. Gumb je tam ugasnjen, ta vrstica
        pa poskrbi, da se zapisek ne ustvari niti, če klik pride po drugi poti. */
     if(state.openDay < todayISO()) return;
-    const t = { id:uid(), text:"", created:state.openDay, done:false, doneDate:null, defer:null };
+    const t = { id:uid(), text:PIKA, created:state.openDay, done:false, doneDate:null, defer:null };
     state.tasks.push(t); zacniPisanje(t.id);
     persist(); refreshIndex(); renderDay(t.id);
     return;
@@ -1298,13 +1399,18 @@ function zacniPisanje(id){
   dayBody.classList.add("pisemo");
 }
 function konecPisanja(ev){
-  if(ev && !ev.target.closest(".note-text")) return;
+  const el = ev && ev.target.closest(".note-text");
+  if(!el) return;
+  el.classList.remove("pripravljeno");
+  pravkarFokusirano = null;
+  pospraviOdstavke(el);
   state.pisemo = null;
   dayBody.classList.remove("pisemo");
 }
 dayBody.addEventListener("focusout", konecPisanja);
+dayBody.addEventListener("focusin", vstopVBesedilo);
+dayBody.addEventListener("click", klikVBesedilo);
 dayBody.addEventListener("input", pisanjeVZapisku);
-dayBody.addEventListener("keydown", enterVZapisku);
 
 /* Vračalka na čisto začetku besedila pobriše celo uro naenkrat.
    Uporabljamo beforeinput, ker se navadni keydown za vračalko na
@@ -1318,6 +1424,9 @@ function kazalecNaZacetku(el){
   return r.toString().length === 0;
 }
 function poskusiOdstranitiUro(el, ev){
+  /* V pripravljenem polju (prvi dotik) vračalka pobriše BESEDILO,
+     ure pa ne. Uro pobrišete potem, kot običajno. */
+  if(el.classList.contains("pripravljeno")) return false;
   const t = state.tasks.find(x => x.id === el.closest(".note").dataset.id);
   if(!t || !t.ura || !kazalecNaZacetku(el)) return false;
   ev.preventDefault();
@@ -1325,7 +1434,7 @@ function poskusiOdstranitiUro(el, ev){
   prerisiSeznam(false);
   // kazalec vrnemo na začetek besedila, da lahko takoj tipkate naprej
   const nov = telesoSeznama().querySelector('[data-id="'+t.id+'"] .note-text');
-  if(nov){ nov.focus();
+  if(nov){ samodejniFokus = true; nov.focus(); samodejniFokus = false;
     const r = document.createRange(); r.selectNodeContents(nov); r.collapse(true);
     const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
   }
@@ -1849,8 +1958,10 @@ function openAll(){
 }
 
 allBody.addEventListener("click", klikVZapisku);
+allBody.addEventListener("click", klikVBesedilo);
+allBody.addEventListener("focusin", vstopVBesedilo);
+allBody.addEventListener("focusout", konecPisanja);
 allBody.addEventListener("input", pisanjeVZapisku);
-allBody.addEventListener("keydown", enterVZapisku);
 allBody.addEventListener("keydown", vracalkaVZapisku);
 allBody.addEventListener("beforeinput", vracalkaPredVnosom);
 
