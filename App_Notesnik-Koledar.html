@@ -287,6 +287,7 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
    se sme spremeniti ob obračanju telefona. Izmerjeno 1. 9. 2026 na iPhonu
    (Safari 26.6): deluje tudi v polju, v katero se piše. */
 .note-text{
+  flex:1 1 auto;min-width:0;              /* polje je široko toliko kot vrstica */
   font-size:16px;line-height:1.4;outline:none;word-break:break-word;min-height:22px;
   white-space:pre-wrap;
 }
@@ -1294,22 +1295,33 @@ let vrednostObVstopu = "";     // vsebina polja, ko ste vanj stopili
 let pravkarFokusirano = null;  // polje, ki je fokus dobilo s tem dotikom
 let samodejniFokus = false;    // fokus je dala koda, ne vaš dotik
 
+/* Kdo je imel fokus, PREDEN ste se dotaknili. Po tem ločimo dotik, ki
+   polje odpre, od dotika, ki v odprtem polju samo postavlja kazalec.
+   Na focus se ni mogoče zanesti: iPhone ga ob drugem dotiku javi znova. */
+let fokusPredDotikom = null;
+function dotikVBesedilo(ev){
+  fokusPredDotikom = document.activeElement;
+  const el = ev.target.closest(".note-text"); if(!el) return;
+  if(document.activeElement === el){
+    /* Polje je bilo že odprto – ta dotik samo postavlja kazalec. */
+    el.classList.remove("pripravljeno");
+    pravkarFokusirano = null;
+  }
+}
 /* Vstop v besedilo. Polje porumeni – kar natipkate, povozi vse.
    Pravega označevanja (select) ne uporabljamo, ker iPhone ob njem
    pokaže oblaček Kopiraj/Prilepi. Uhojena pot iz aplikacije Neto-Bruto. */
 function vstopVBesedilo(ev){
   const el = ev.target.closest(".note-text"); if(!el) return;
+  /* Prazno polje se odpre s pikico – enako kot nov zapisek. Zato je
+     pikico mogoče dobiti nazaj tudi v prvo vrstico. */
+  if(!el.textContent.trim()){ el.textContent = PIKA; placeCaretEnd(el); }
   prejsnjeBesedilo = vrednostObVstopu = el.textContent;
   if(samodejniFokus) return;              // fokus je dala koda, ne dotik
-  if(!el.textContent.trim()) return;      // v praznem polju ni kaj povoziti
+  if(el.textContent === PIKA) return;     // v sami pikici ni kaj povoziti
+  if(fokusPredDotikom === el) return;     // polje je bilo odprto že prej
   el.classList.add("pripravljeno");
   pravkarFokusirano = el;
-}
-/* Drugi, ločeni dotik postavi kazalec – takrat pripravljenost odpade. */
-function klikVBesedilo(ev){
-  const el = ev.target.closest(".note-text"); if(!el) return;
-  if(pravkarFokusirano === el){ pravkarFokusirano = null; return; }
-  el.classList.remove("pripravljeno");
 }
 /* Kaj je bilo pravkar vstavljeno: kje in kaj. */
 function vstavljeno(staro, novo){
@@ -1407,9 +1419,9 @@ function konecPisanja(ev){
   state.pisemo = null;
   dayBody.classList.remove("pisemo");
 }
+dayBody.addEventListener("pointerdown", dotikVBesedilo, true);
 dayBody.addEventListener("focusout", konecPisanja);
 dayBody.addEventListener("focusin", vstopVBesedilo);
-dayBody.addEventListener("click", klikVBesedilo);
 dayBody.addEventListener("input", pisanjeVZapisku);
 
 /* Vračalka na čisto začetku besedila pobriše celo uro naenkrat.
@@ -1958,7 +1970,7 @@ function openAll(){
 }
 
 allBody.addEventListener("click", klikVZapisku);
-allBody.addEventListener("click", klikVBesedilo);
+allBody.addEventListener("pointerdown", dotikVBesedilo, true);
 allBody.addEventListener("focusin", vstopVBesedilo);
 allBody.addEventListener("focusout", konecPisanja);
 allBody.addEventListener("input", pisanjeVZapisku);
